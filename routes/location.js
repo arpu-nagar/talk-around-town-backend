@@ -80,6 +80,33 @@ router.post('/addLocation', authenticateJWT, async (req, res) => {
     }
 });
 
+router.post('/tips', authenticateJWT, async (req, res) => {
+    // get tips from db
+    // first get userid from req.user
+    // get type from req.body
+    // then get tips from db
+    // return tips
+    // const user_id = req.user.id;
+    const { type } = req.body;
+    const db = await pool.getConnection();
+    const [rows] = await pool.query(
+        'SELECT * FROM tips WHERE type = ?',
+        [type],
+    );
+    db.release();
+    // select 3 random tips
+    const tips = [];
+    const randomIndices = [];
+    while (randomIndices.length < 3) {
+        const randomIndex = Math.floor(Math.random() * rows.length);
+        if (!randomIndices.includes(randomIndex)) {
+            randomIndices.push(randomIndex);
+            tips.push(rows[randomIndex]);
+        }
+    }
+    return res.json(tips);
+});
+
 router.post('/locations', authenticateJWT, async (req, res) => {
     // get location from db
     // first get userid from req.user

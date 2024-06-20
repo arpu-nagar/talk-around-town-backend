@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import body from 'body-parser';
 // import axios from 'axios';
+import cors from 'cors';
 import location from './routes/location';
 // import admin from 'firebase-admin';
 // import { GoogleAuth } from 'google-auth-library';
@@ -11,6 +12,8 @@ import morgan from 'morgan';
 // const SCOPES = ['https://www.googleapis.com/auth/firebase.messaging'];
 import user from './routes/user';
 const app = express();
+app.use(cors());
+
 // const fcmSendEndpoint =
 // 	'https://fcm.googleapis.com/v1/projects/talk-around-town-423916/messages:send';
 // Authenticate a credential with the service account
