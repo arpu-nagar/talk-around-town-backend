@@ -15,6 +15,7 @@ const router = express.Router();
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
 });
+
 function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
     var R = 6371; // Radius of the Earth in km
     var dLat = deg2rad(lat2 - lat1); // deg2rad below
@@ -33,21 +34,6 @@ function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
 function deg2rad(deg) {
     return deg * (Math.PI / 180);
 }
-
-// const locations = [
-//     {
-//         latitude: 29.646868333333334,
-//         longitude: -82.33709333333333,
-//         latitudeDelta: 0.015,
-//         longitudeDelta: 0.0121,
-//     },
-//     {
-//         latitude: 29.644218333333335,
-//         longitude: -82.33938666666667,
-//         latitudeDelta: 0.015,
-//         longitudeDelta: 0.0121,
-//     },
-// ];
 
 router.post('/addLocation', authenticateJWT, async (req, res) => {
     try {
@@ -70,9 +56,11 @@ router.post('/addLocation', authenticateJWT, async (req, res) => {
 
         // Check if the insertion was successful
         if (result.affectedRows === 1) {
-            res.status(201).json({ message: 'Location added successfully' });
+            return res
+                .status(201)
+                .json({ message: 'Location added successfully' });
         } else {
-            res.status(500).json({ error: 'Failed to add location' });
+            return res.status(500).json({ error: 'Failed to add location' });
         }
     } catch (error) {
         console.error('Error adding location:', error);
@@ -87,24 +75,28 @@ router.post('/tips', authenticateJWT, async (req, res) => {
     // then get tips from db
     // return tips
     // const user_id = req.user.id;
-    const { type } = req.body;
-    const db = await pool.getConnection();
-    const [rows] = await pool.query(
-        'SELECT * FROM tips WHERE type = ?',
-        [type],
-    );
-    db.release();
-    // select 3 random tips
-    const tips = [];
-    const randomIndices = [];
-    while (randomIndices.length < 3) {
-        const randomIndex = Math.floor(Math.random() * rows.length);
-        if (!randomIndices.includes(randomIndex)) {
-            randomIndices.push(randomIndex);
-            tips.push(rows[randomIndex]);
+    try {
+        const { type } = req.body;
+        // const db = await pool.getConnection();
+        const [rows] = await pool.query('SELECT * FROM tips WHERE type = ?', [
+            type,
+        ]);
+        // db.release();
+        // select 3 random tips
+        const tips = [];
+        const randomIndices = [];
+        while (randomIndices.length < 3) {
+            const randomIndex = Math.floor(Math.random() * rows.length);
+            if (!randomIndices.includes(randomIndex)) {
+                randomIndices.push(randomIndex);
+                tips.push(rows[randomIndex]);
+            }
         }
+        return res.status(200).json(tips);
+    } catch (e) {
+        console.log('error in fetcing tips', e);
+        return res.status(500).json({ message: 'No tips found' });
     }
-    return res.json(tips);
 });
 
 router.post('/locations', authenticateJWT, async (req, res) => {
@@ -113,12 +105,12 @@ router.post('/locations', authenticateJWT, async (req, res) => {
     // then get location from db
     // return location
     const user_id = req.user.id;
-    const db = await pool.getConnection();
+    // const db = await pool.getConnection();
     const [rows] = await pool.query(
         'SELECT * FROM locations WHERE user_id = ?',
         [user_id],
     );
-    db.release();
+    // db.release();
     const locations = rows.map(row => ({
         latitude: parseFloat(row.lat),
         longitude: parseFloat(row.long),
@@ -126,14 +118,21 @@ router.post('/locations', authenticateJWT, async (req, res) => {
         longitudeDelta: 0.0121, // Assuming a default value
     }));
 
+    const colors = ['red', 'green', 'blue'];
+
+    const getRandomColor = () => {
+        const randomIndex = Math.floor(Math.random() * colors.length);
+        return colors[randomIndex];
+    };
+
     const details = rows.map(row => ({
         title: row.name,
         description: row.desc,
-        pinColor: 'blue', // Assuming a default value, you can customize this as needed
+        pinColor: getRandomColor(),
     }));
 
     // Send the transformed data as a JSON response
-    return res.json({ locations, details });
+    return res.status(200).json({ locations, details });
     // return res.json(rows);
 });
 
@@ -141,10 +140,10 @@ router.post('/', authenticateJWT, async (req, res) => {
     // return res.send('Not in range of any point');
     const client = await auth.getClient();
     const accessToken = await client.getAccessToken();
-    const db = await pool.getConnection();
+    // const db = await pool.getConnection();
     let user_id = req.user.id;
     const { latitude, longitude } = req.body;
-    const [rows] = await db.query(
+    const [rows] = await pool.query(
         'SELECT id, name, lat, `long` FROM locations WHERE user_id = ?;',
         [user_id],
     );
@@ -178,7 +177,7 @@ router.post('/', authenticateJWT, async (req, res) => {
     if (!flag) {
         return res.send('Not in range of any point');
     }
-    const [notifs] = await db.query(
+    const [notifs] = await pool.query(
         `
     SELECT COUNT(*) AS notification_count
   FROM notifications
@@ -190,12 +189,12 @@ router.post('/', authenticateJWT, async (req, res) => {
     );
     // console.log(notifs);
     if (notifs[0].notification_count > 0) {
-        db.release();
+        // db.release();
         console.log('Already sent a notification for this location today.');
-        return res.send('Already sent');
+        return res.status(200).send('Already sent');
     }
     // get android token from users table
-    const [result] = await db.query(
+    const [result] = await pool.query(
         'SELECT android_token FROM users WHERE id = ?',
         [user_id],
     );
@@ -205,7 +204,7 @@ router.post('/', authenticateJWT, async (req, res) => {
         message: {
             token: androidToken,
             notification: {
-                title: `You have arrived at ${name}!`,
+                title: `You have arrived at ${name}`,
                 body: 'Click here for some tips to make the most of your visit.',
                 // message: 'Click here for some tips to make the most of your visit.',
             },
@@ -221,18 +220,17 @@ router.post('/', authenticateJWT, async (req, res) => {
         .then(async response => {
             console.log('Message sent successfully:', response.data);
             // Update the count in the database
-            const [result] = await db.query(
+            const [result] = await pool.query(
                 `INSERT INTO notifications (user_id, loc_id, device_id)
     VALUES (?, ?, ?);`,
                 [user_id, found_id, androidToken],
             );
-            db.release();
             console.log('Notification inserted successfully:');
         })
         .catch(error => {
             console.error('Error sending message:', error.response.data);
         });
-    res.send("Send notification, let's see if it works");
+    return res.status(200).send("Send notification, let's see if it works");
 });
 
 module.exports = router;

@@ -6,20 +6,21 @@ const register = async (req, res) => {
   const { name, email, password } = req.body;
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
-    const db = await pool.getConnection();
-    const [result] = await db.query('INSERT INTO users (name, email, password) VALUES (?, ?, ?)', [name, email, hashedPassword]);
-    db.release();
-    res.status(200).json({ message: 'User registered successfully!' });
+    // const db = await pool.getConnection();
+    const [result] = await pool.query('INSERT INTO users (name, email, password) VALUES (?, ?, ?)', [name, email, hashedPassword]);
+    
+    return res.status(200).json({ message: 'User registered successfully!' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.log('error in registering user', error.message);
+    return res.status(500).json({ error: error.message });
   }
 };
 
 const login = async (req, res) => {
   const { email, password } = req.body;
   try {
-    const db = await pool.getConnection();
-    const [rows] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
+    // const db = await pool.getConnection();
+    const [rows] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
     db.release();
     if (rows.length === 0) {
       return res.status(401).json({ message: 'Invalid email or password' });
@@ -30,9 +31,9 @@ const login = async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
     const token = jwt.sign({ id: user.id }, 'your_jwt_secret', { expiresIn: '12h' });
-    res.json({ access_token: token, user });
+    return res.status(200).json({ access_token: token, user });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: error.message });
   }
 };
 
@@ -96,8 +97,8 @@ const token = async (req, res) => {
   let {token} = req.body;
   // insert token into users table where user_id = user_id
   try {
-    const db = await pool.getConnection();
-    const [result] = await db.query('UPDATE users SET android_token = ? WHERE id = ?', [token, user_id]);
+    // const db = await pool.getConnection();
+    const [result] = await pool.query('UPDATE users SET android_token = ? WHERE id = ?', [token, user_id]);
     db.release();
     res.status(200).json({ message: 'Token updated successfully!' });
   } catch (error) {
