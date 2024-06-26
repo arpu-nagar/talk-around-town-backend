@@ -6,6 +6,7 @@ import location from './routes/location';
 import 'dotenv/config';
 import morgan from 'morgan';
 import user from './routes/user';
+import tips from './routes/tips';
 const app = express();
 app.use(cors());
 
@@ -20,7 +21,7 @@ app.use(body.urlencoded({ extended: true }));
 import authroutes from './routes/auth';
 app.use('/api/auth', authroutes);
 app.use('/api/home', user);
-
+app.use('/api/tips', tips);
 app.get('/', async (req, res) => {
     return res.send('Active');
 });

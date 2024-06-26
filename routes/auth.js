@@ -21,7 +21,7 @@ const login = async (req, res) => {
   try {
     // const db = await pool.getConnection();
     const [rows] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
-    db.release();
+    // db.release();
     if (rows.length === 0) {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
@@ -99,7 +99,7 @@ const token = async (req, res) => {
   try {
     // const db = await pool.getConnection();
     const [result] = await pool.query('UPDATE users SET android_token = ? WHERE id = ?', [token, user_id]);
-    db.release();
+    // db.release();
     res.status(200).json({ message: 'Token updated successfully!' });
   } catch (error) {
     res.status(500).json({ error: error.message });

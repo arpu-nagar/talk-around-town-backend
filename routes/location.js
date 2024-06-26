@@ -144,7 +144,7 @@ router.post('/', authenticateJWT, async (req, res) => {
     let user_id = req.user.id;
     const { latitude, longitude } = req.body;
     const [rows] = await pool.query(
-        'SELECT id, name, lat, `long` FROM locations WHERE user_id = ?;',
+        'SELECT * FROM locations WHERE user_id = ?;',
         [user_id],
     );
 
@@ -155,11 +155,13 @@ router.post('/', authenticateJWT, async (req, res) => {
         latitudeDelta: 0.015, // Assuming a default value
         longitudeDelta: 0.0121, // Assuming a default value
         name: row.name,
+        type: row.type,
     }));
     // const { latitude, longitude } = req.body;
     let flag = false;
     let found_id = -1;
     let name = 'random';
+    let type = 'random';
     locations.forEach(location => {
         const distance = getDistanceFromLatLonInKm(
             latitude,
@@ -172,6 +174,7 @@ router.post('/', authenticateJWT, async (req, res) => {
             flag = true;
             found_id = location.id;
             name = location.name;
+            type = location.type;
         }
     });
     if (!flag) {
@@ -205,8 +208,7 @@ router.post('/', authenticateJWT, async (req, res) => {
             token: androidToken,
             notification: {
                 title: `You have arrived at ${name}`,
-                body: 'Click here for some tips to make the most of your visit.',
-                // message: 'Click here for some tips to make the most of your visit.',
+                body: `${type}: Click here for some tips to make the most of your visit.`,
             },
         },
     };
