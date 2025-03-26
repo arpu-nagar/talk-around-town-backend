@@ -424,6 +424,145 @@ const resetPassword = async (req, res) => {
     });
   }
 };
+const deleteAccount = async (req, res) => {
+  const userId = req.user.id; // User ID from JWT token
+  
+  let connection;
+  try {
+    console.log(`Processing account deletion for user ID: ${userId}`);
+    
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    
+    // Delete children records
+    const [childrenResult] = await connection.query('DELETE FROM children WHERE user_id = ?', [userId]);
+    console.log(`Deleted ${childrenResult.affectedRows} children records`);
+    
+    // Delete location records
+    const [locationResult] = await connection.query('DELETE FROM locations WHERE user_id = ?', [userId]);
+    console.log(`Deleted ${locationResult.affectedRows} location records`);
+    
+    // Delete user's app sessions
+    const [sessionsResult] = await connection.query('DELETE FROM app_sessions WHERE user_id = ?', [userId]);
+    console.log(`Deleted ${sessionsResult.affectedRows} session records`);
+    
+    // Delete any notifications
+    const [notificationsResult] = await connection.query('DELETE FROM notifications WHERE user_id = ?', [userId]);
+    console.log(`Deleted ${notificationsResult.affectedRows} notification records`);
+    
+    // Delete tips related to this user (if applicable)
+    // Note: Adjust this if your tips table doesn't have a user_id column
+    try {
+      const [tipsResult] = await connection.query('DELETE FROM tips WHERE user_id = ?', [userId]);
+      console.log(`Deleted ${tipsResult.affectedRows} tip records`);
+    } catch (error) {
+      // Skip if table doesn't exist or column doesn't exist
+      console.log('No tips records deleted - table might not have user_id column');
+    }
+    
+    // Finally delete the user
+    const [userResult] = await connection.query('DELETE FROM users WHERE id = ?', [userId]);
+    
+    if (userResult.affectedRows === 0) {
+      await connection.rollback();
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    await connection.commit();
+    console.log(`Successfully deleted user account with ID: ${userId}`);
+    
+    return res.status(200).json({
+      message: 'Account deleted successfully',
+      success: true
+    });
+    
+  } catch (error) {
+    console.error('Error deleting account:', error);
+    
+    if (connection) {
+      await connection.rollback();
+    }
+    
+    return res.status(500).json({
+      error: 'Failed to delete account. Please try again.',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  } finally {
+    if (connection) {
+      connection.release();
+    }
+  }
+};
+
+const changePassword = async (req, res) => {
+  const userId = req.user.id; // From JWT authentication
+  const { currentPassword, newPassword } = req.body;
+  
+  // Validate inputs
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'Current password and new password are required' });
+  }
+  
+  if (newPassword.length < 8) {
+    return res.status(400).json({ error: 'New password must be at least 8 characters long' });
+  }
+  
+  let connection;
+  try {
+    // Get user's current password hash from database
+    const [users] = await pool.query('SELECT password FROM users WHERE id = ?', [userId]);
+    
+    if (users.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    const user = users[0];
+    
+    // Verify current password
+    const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+    
+    // Hash new password
+    const hashedNewPassword = await bcrypt.hash(newPassword, 12);
+    
+    // Begin transaction to update password
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    
+    // Update password in database
+    await connection.query(
+      'UPDATE users SET password = ? WHERE id = ?',
+      [hashedNewPassword, userId]
+    );
+    
+    await connection.commit();
+    
+    return res.status(200).json({
+      message: 'Password changed successfully',
+      success: true
+    });
+    
+  } catch (error) {
+    console.error('Change password error:', error);
+    
+    if (connection) {
+      await connection.rollback();
+    }
+    
+    return res.status(500).json({
+      error: 'Failed to change password. Please try again.',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  } finally {
+    if (connection) {
+      connection.release();
+    }
+  }
+};
+
 
 // Modified logout to handle refresh tokens
 const logout = async (req, res) => {
@@ -569,5 +708,7 @@ router.get('/device-tokens', authenticateJWT, getDeviceTokens);
 router.post('/request-reset', requestPasswordReset);
 router.post('/reset-password', resetPassword);
 router.post('/test-email', testEmail);
+router.delete('/delete-account', authenticateJWT, deleteAccount);
+router.post('/change-password', authenticateJWT, changePassword);
 
 module.exports = router;
