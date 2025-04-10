@@ -2,7 +2,7 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
-const authenticateJWT = require('./middleware');
+const { authenticateJWT } = require('./middleware');
 const express = require('express');
 const router = express.Router();
 const nodemailer = require('nodemailer');
@@ -144,7 +144,8 @@ const register = async (req, res) => {
 const login = async (req, res) => {
   const { email, password } = req.body;
   try {
-    const [rows] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
+    // Get user with isAdmin flag included
+    const [rows] = await pool.query('SELECT *, isAdmin FROM users WHERE email = ?', [email]);
     
     if (rows.length === 0) {
       return res.status(401).json({ message: 'Invalid email or password' });
@@ -167,18 +168,24 @@ const login = async (req, res) => {
       user.children = [];
     }
 
-    // Generate access token (shorter expiry)
+    // Generate access token with isAdmin included
     const accessToken = jwt.sign(
-      { id: user.id }, 
+      { 
+        id: user.id,
+        isAdmin: user.isAdmin || false  // Include admin status in token
+      }, 
       process.env.JWT_SECRET || 'your_jwt_secret',
-      { expiresIn: '1h' }  // Shorter expiry for access token
+      { expiresIn: '1h' }
     );
 
     // Generate refresh token (longer expiry)
     const refreshToken = jwt.sign(
-      { id: user.id }, 
+      { 
+        id: user.id,
+        isAdmin: user.isAdmin || false  // Include admin status in refresh token too
+      }, 
       process.env.REFRESH_SECRET || 'your_refresh_secret',
-      { expiresIn: '30d' }  // Much longer expiry for refresh token
+      { expiresIn: '30d' }
     );
 
     // Store refresh token in database
@@ -193,6 +200,7 @@ const login = async (req, res) => {
     return res.status(200).json({ 
       access_token: accessToken,
       refresh_token: refreshToken,
+      isAdmin: user.isAdmin || false, // Include in response
       user
     });
     
@@ -200,6 +208,7 @@ const login = async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
 };
+
 
 // Fixed JWT verification endpoint
 const authenticateJWTReval = async (req, res) => {
@@ -254,7 +263,7 @@ const refreshAccessToken = async (req, res) => {
     
     // Check if refresh token exists in database
     const [rows] = await pool.query(
-      'SELECT id FROM users WHERE id = ? AND refresh_token = ?',
+      'SELECT id, isAdmin FROM users WHERE id = ? AND refresh_token = ?',
       [decoded.id, refresh_token]
     );
 
@@ -262,9 +271,14 @@ const refreshAccessToken = async (req, res) => {
       return res.status(401).json({ message: 'Invalid refresh token' });
     }
 
-    // Generate new access token
+    const user = rows[0];
+
+    // Generate new access token with isAdmin included
     const newAccessToken = jwt.sign(
-      { id: decoded.id },
+      { 
+        id: decoded.id,
+        isAdmin: user.isAdmin || false
+      },
       process.env.JWT_SECRET || 'your_jwt_secret',
       { expiresIn: '1h' }
     );

@@ -9,6 +9,8 @@ import user from './routes/user';
 import tips from './routes/tips';
 import childrenRouter from './routes/children';
 import sessionRoutes from './routes/sessions';
+import dashboardRoutes from './routes/dashboard.js';
+import adminRoutes from './routes/adminRoutes';
 const app = express();
 app.use(cors());
 
@@ -21,6 +23,9 @@ app.use(body.json());
 app.use(body.urlencoded({ extended: true }));
 app.use('/endpoint', childrenRouter);
 app.use('/endpoint/session', sessionRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/admin', adminRoutes);
+
 
 import authroutes from './routes/auth';
 app.use('/api/auth', authroutes);

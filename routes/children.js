@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../config/db');
-const authenticateJWT = require('./middleware');
+const { authenticateJWT } = require('./middleware');
 
 // Get children information for a user
 router.get('/children', authenticateJWT, async (req, res) => {

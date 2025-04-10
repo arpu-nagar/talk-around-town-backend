@@ -2,7 +2,8 @@ const express = require('express');
 const axios = require('axios');
 const admin = require('firebase-admin');
 const pool = require('../config/db');
-const authenticateJWT = require('./middleware');
+// const { authenticateJWT } = require('./middleware');
+const { authenticateJWT } = require('./middleware');
 const serviceAccount = require('../key.json');
 const router = express.Router();
 // if (!admin.apps.length) {
