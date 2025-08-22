@@ -86,7 +86,7 @@ const register = async (req, res) => {
     const accessToken = jwt.sign(
       { id: userId },
       process.env.JWT_SECRET || 'your_jwt_secret',
-      { expiresIn: '1h' }
+      { expiresIn: '7d' }
     );
 
     // Generate refresh token (30 days expiry)
@@ -175,7 +175,7 @@ const login = async (req, res) => {
         isAdmin: user.isAdmin || false  // Include admin status in token
       }, 
       process.env.JWT_SECRET || 'your_jwt_secret',
-      { expiresIn: '1h' }
+      { expiresIn: '7d' }
     );
 
     // Generate refresh token (longer expiry)
@@ -280,7 +280,7 @@ const refreshAccessToken = async (req, res) => {
         isAdmin: user.isAdmin || false
       },
       process.env.JWT_SECRET || 'your_jwt_secret',
-      { expiresIn: '1h' }
+      { expiresIn: '7d' }
     );
 
     return res.status(200).json({
