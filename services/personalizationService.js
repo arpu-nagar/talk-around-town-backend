@@ -1,6 +1,7 @@
 import { OpenAI } from 'openai';
 import pool from '../config/db.js';
 import { TIPS_SYSTEM_PROMPT } from '../utils/parentingGuardrails.js';
+import crypto from 'crypto';
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
@@ -25,6 +26,83 @@ class PersonalizationService {
       throw error;
     }
   }
+
+  async upsertGeneratedTip(clientTipId, tipPayload) {
+    if (!tipPayload || !tipPayload.title || !tipPayload.body) {
+      throw new Error('tipPayload with {title, body} is required for generated tips');
+    }
+  
+    const title   = String(tipPayload.title).trim().slice(0, 100);
+    const body    = String(tipPayload.body).trim();
+    const details = String(tipPayload.details || '').trim();
+  
+    // categories can be ["activities","sibling-rivalry"] OR
+    // [{ type:'challenge', value:'tantrums', confidence:0.9 }]
+    let categories = Array.isArray(tipPayload.categories) ? tipPayload.categories : [];
+  
+    // Deduplicate by content
+    const content_hash = crypto.createHash('sha256')
+      .update(`${title}|${body}|${details}`)
+      .digest('hex');
+  
+    // Reuse if present
+    const [existing] = await pool.query(
+      'SELECT id FROM tips WHERE content_hash = ? LIMIT 1',
+      [content_hash]
+    );
+    if (existing.length) return existing[0].id;
+  
+    // Insert the tip
+    const [ins] = await pool.query(
+      `INSERT INTO tips (type, title, description, source, content_hash)
+       VALUES (?, ?, ?, 'ai', ?)`,
+      ['generated', title, body, content_hash]
+    );
+    const newTipId = ins.insertId;
+  
+    // ---- FIXED: insert categories into (category_type, category_value, confidence)
+    try {
+      // normalize into rows: [tip_id, category_type, category_value, confidence]
+      const rows = categories
+        .slice(0, 12) // keep it reasonable
+        .map((c) => {
+          if (!c) return null;
+          if (typeof c === 'string') {
+            return [newTipId, 'content', c.trim().toLowerCase(), 1.00];
+          }
+          // object form
+          const t = String(c.type || 'content').trim().toLowerCase();
+          const v = String(c.value ?? c.name ?? c.category ?? '').trim().toLowerCase();
+          if (!v) return null;
+          const conf = typeof c.confidence === 'number'
+            ? Math.max(0, Math.min(1, c.confidence))
+            : 1.00;
+          return [newTipId, t, v, conf];
+        })
+        .filter(Boolean);
+  
+      if (rows.length) {
+        await pool.query(
+          `INSERT IGNORE INTO tip_categories
+             (tip_id, category_type, category_value, confidence)
+           VALUES ?`,
+          [rows]
+        );
+      }
+    } catch (catErr) {
+      console.error('Category insert failed (non-fatal):', catErr);
+      // don’t throw; categories are optional
+    }
+    // ---- END FIX
+  
+    // Create/store embedding
+    const embedding = await this.generateTipEmbedding({ title, body, details, description: body });
+    await this.storeTipEmbedding(newTipId, embedding);
+  
+    return newTipId;
+  }
+  
+
 
   async storeTipEmbedding(tipId, embedding) {
     try {
