@@ -38,9 +38,9 @@ function categoryReply(category, originalQuery) {
 
 // Track user interaction with a tip (like/dislike/save/unsave)
 router.post('/interactions', authenticateJWT, async (req, res) => {
-    try {
-        const userId = req.user.id;
-        const { tipId, interactionType } = req.body;
+  try {
+    const userId = req.user.id;
+    const { tipId, interactionType, tipPayload } = req.body;
 
         const validTypes = ['like', 'dislike', 'save', 'unsave'];
         if (!validTypes.includes(interactionType)) {
@@ -53,28 +53,26 @@ router.post('/interactions', authenticateJWT, async (req, res) => {
             return res.status(400).json({ error: 'Tip ID is required' });
         }
 
-        await personalizationService.trackUserInteraction(
-            userId,
-            tipId,
-            interactionType,
-        );
+       let finalTipId = tipId;
+   if (String(tipId).startsWith('generated_')) {
+     finalTipId = await personalizationService.upsertGeneratedTip(tipId, tipPayload);
+   }
 
-        res.status(200).json({
-            message: 'Interaction tracked successfully',
-            userId,
-            tipId,
-            interactionType,
-        });
-    } catch (error) {
-        console.error('Error tracking interaction:', error);
-        res.status(500).json({
-            error: 'Failed to track interaction',
-            details:
-                process.env.NODE_ENV === 'development'
-                    ? error.message
-                    : undefined,
-        });
-    }
+   await personalizationService.trackUserInteraction(userId, finalTipId, interactionType);
+
+    res.status(200).json({
+      message: 'Interaction tracked successfully',
+      userId,
+      tipId: finalTipId,
+      interactionType,
+    });
+  } catch (error) {
+    console.error('Error tracking interaction:', error);
+    res.status(500).json({
+      error: 'Failed to track interaction',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
 });
 
 // Personalized recommendations feed
@@ -421,16 +419,39 @@ router.post('/ai-interactions/batch', authenticateJWT, async (req, res) => {
                 .json({ error: 'interactions must be an array' });
         }
 
-        // (Optional) Persist for analytics/personalization later
-        // for now, just acknowledge so the app can clear its queue
-        // Example: insert into a table or enqueue to a worker
+    let persisted = 0;
 
-        return res.json({ ok: true, count: interactions.length, userId });
-    } catch (e) {
-        console.error('ai-interactions/batch error:', e);
-        return res.status(500).json({ error: 'failed to record interactions' });
+    for (const item of interactions) {
+      // accept either interactionType or kind
+      const interactionType = item?.interactionType || item?.kind;
+      const rawTipId = item?.tipId;
+
+      if (!interactionType || !['like','dislike','save','unsave'].includes(interactionType)) continue;
+      if (!rawTipId) continue;
+
+      // If AI-generated (e.g. "generated_..."), insert into tips first and embed
+      const tipId = await ensureTipExists(rawTipId, {
+        title: item?.title,
+        body: item?.body,
+        details: item?.details,
+        categories: item?.categories
+      });
+
+      try {
+        await personalizationService.trackUserInteraction(userId, tipId, interactionType);
+        persisted++;
+      } catch (e) {
+        console.warn('Skipping one interaction due to error:', e.message);
+      }
     }
+
+    return res.json({ ok: true, count: persisted, userId });
+  } catch (e) {
+    console.error('ai-interactions/batch error:', e);
+    return res.status(500).json({ error: 'failed to record interactions' });
+  }
 });
+
 
 // Profile summary
 router.get('/profile', authenticateJWT, async (req, res) => {
@@ -1221,6 +1242,44 @@ async function applySurveyScoring(userId, tips) {
             };
         })
         .sort((a, b) => b.similarity_score - a.similarity_score);
+}
+
+// Upsert generated tips so they can be referenced by interactions/embeddings
+async function ensureTipExists(tipId, aiTip = {}) {
+  // If already a numeric DB id, return it as-is
+  if (/^\d+$/.test(String(tipId))) return Number(tipId);
+
+  const title = aiTip?.title || 'AI Tip';
+  const description = aiTip?.body || aiTip?.details || '';
+  const type = Array.isArray(aiTip?.categories) && aiTip.categories[0] ? aiTip.categories[0] : 'generated';
+
+  // Try find an existing row with same content to avoid dupes
+  const [existing] = await pool.query(
+    `SELECT id FROM tips WHERE type = ? AND title = ? AND description = ? LIMIT 1`,
+    [type, title, description]
+  );
+  if (existing.length) return existing[0].id;
+
+  // Insert new tip
+  const [insert] = await pool.query(
+    `INSERT INTO tips (title, description, type) VALUES (?, ?, ?)`,
+    [title, description, type]
+  );
+  const newId = insert.insertId;
+
+  // Create embedding so it participates in personalization
+  try {
+    const embedding = await personalizationService.generateTipEmbedding({
+      title,
+      body: description,
+      details: '',
+    });
+    await personalizationService.storeTipEmbedding(newId, embedding);
+  } catch (e) {
+    console.warn('Failed to embed generated tip:', e.message);
+  }
+
+  return newId;
 }
 
 function getKeywordsForPreference(pref) {
