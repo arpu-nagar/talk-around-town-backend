@@ -394,6 +394,11 @@ function tryHexDecode(s) {
     }
 }
 
+// helper: test arrays of regex
+function hasMatch(text, patterns) {
+    return patterns?.some(re => re.test(text)) || false;
+}
+
 export function classifyParentingQuery(prompt) {
     const raw = prompt || '';
     const q = hardNormalize(raw); // your hardened normalizer (lowercase, trim, etc.)
@@ -424,9 +429,15 @@ export function classifyParentingQuery(prompt) {
     const hasSensitiveParenting = containsAny(q, ALLOWLIST_SENSITIVE_PARENTING); // e.g., breastfeeding terms
     const framing = HYPOTHETICAL_FRAMING.test(q);
 
+    // --- Broad dangerous fast-fail (violence/illegal/drugs/hacking bucket you defined) ---
+    if (hasMatch(q, DANGEROUS_PATTERNS)) {
+        return { ok: false, category: 'illegal_activity' };
+    }
+
     // --- Adult/sexual content: allow breastfeeding/weaning terms; otherwise block ---
     if (!hasSensitiveParenting) {
         if (
+            SEXUAL.test(q) ||
             matchesLooseAny(q, [
                 'sex',
                 'porn',
@@ -438,7 +449,7 @@ export function classifyParentingQuery(prompt) {
         ) {
             return { ok: false, category: 'adult_content' };
         }
-        if (matchesLooseAny(q, ['dating', 'hookup'])) {
+        if (ADULT_REL.test(q) || matchesLooseAny(q, ['dating', 'hookup'])) {
             return { ok: false, category: 'adult_relationships' };
         }
     }
@@ -448,6 +459,7 @@ export function classifyParentingQuery(prompt) {
         return { ok: false, category: 'harassment_hate' };
     }
     if (
+        VIOLENCE_WEAPONS.test(q) ||
         matchesLooseAny(q, [
             'kill',
             'murder',
@@ -461,6 +473,7 @@ export function classifyParentingQuery(prompt) {
         return { ok: false, category: 'violence_illegal' };
     }
     if (
+        DRUGS.test(q) ||
         matchesLooseAny(q, [
             'weed',
             'marijuana',
@@ -478,6 +491,7 @@ export function classifyParentingQuery(prompt) {
     }
     if (
         FINANCE.test(q) ||
+        FINANCIAL_ACTION.test(q) ||
         matchesLooseAny(q, [
             'crypto',
             'bitcoin',
@@ -508,7 +522,11 @@ export function classifyParentingQuery(prompt) {
     ) {
         return { ok: false, category: 'gambling' };
     }
+    if (CAREER.test(q)) {
+        return { ok: false, category: 'career_jobs' };
+    }
     if (
+        ILLEGAL.test(q) ||
         EXPLOIT_ILLEGAL.test(q) ||
         matchesLooseAny(q, [
             'hack',
@@ -525,7 +543,7 @@ export function classifyParentingQuery(prompt) {
     if (SOFTWARE_IT.test(q)) {
         return { ok: false, category: 'software_it' };
     }
-    if (MEDICAL_LEGAL.test(q)) {
+    if (MEDICAL_LEGAL.test(q) || hasMatch(q, MEDICAL_LEGAL_PATTERNS)) {
         return { ok: false, category: 'medical_legal' };
     }
 
