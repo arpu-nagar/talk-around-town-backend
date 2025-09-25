@@ -1,7 +1,7 @@
 // --- Patterns -------------
 const DANGEROUS_PATTERNS = [
     // Violence / illegal
-    /\b(kill|murder|harm|poison|assault|stab|shoot|buy\s*gun|make\s*bomb|arson|break\s?in|burglary|steal|kidnap|abduct|stalk)\b/i,
+    /\b(beat|kill|murder|harm|poison|assault|stab|shoot|buy\s*gun|make\s*bomb|arson|break\s?in|burglary|steal|kidnap|abduct|stalk)\b/i,
     // Self-harm
     /\b(suicide|self[-\s]?harm|self[-\s]?injur(y|e)|kill myself|end my life|cutting)\b/i,
     // Adult sexual content
@@ -46,7 +46,7 @@ const EXPLOIT_ILLEGAL =
     /\b(hack(ing)?|exploit|sql injection|ddos|malware|shellcode|rootkit|zero[-\s]?day)\b/i;
 
 const VIOLENCE_WEAPONS =
-    /\b(kill|murder|stab|shoot|bomb|grenade|gun|pistol|rifle|ammo|arson)\b/i;
+    /\b(kill|murder|stab|shoot|bomb|grenade|gun|pistol|rifle|ammo|arson|beat)\b/i;
 const DRUGS =
     /\b(heroin|cocaine|meth|mdma|lsd|fentanyl|opioid|weed|marijuana|vape|alcohol|vodka|whiskey|beer)\b/i;
 
