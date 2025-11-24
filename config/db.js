@@ -1,7 +1,11 @@
-// const mysql = require('promise-mysql');
-const mysql = require('mysql2/promise');
-const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, "../.env") });
+import mysql from 'mysql2/promise';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.join(__dirname, "../.env") });
 
 // Create a connection pool
 const pool = mysql.createPool({
@@ -23,4 +27,4 @@ pool.query('SELECT 1 + 1 AS solution').then(([rows, fields]) => {
   console.log('Connected to the SQL DB.');
 });
 
-module.exports = pool;
+export default pool;

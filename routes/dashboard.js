@@ -1,7 +1,7 @@
 import express from 'express';
 import pool from '../config/db.js';
-// import authenticateJWT from './middleware.js';
-const { authenticateJWT, authorizeAdmin } = require('./middleware');
+import { authenticateJWT, authorizeAdmin } from './middleware.js';
+
 const router = express.Router();
 
 // Get dashboard summary data
@@ -54,8 +54,8 @@ router.get('/users/timeline', authenticateJWT, async (req, res) => {
 router.get('/children/ages', authenticateJWT, async (req, res) => {
   try {
     const [results] = await pool.query(`
-      SELECT 
-        TIMESTAMPDIFF(YEAR, date_of_birth, CURDATE()) as age,
+      SELECT
+        age,
         COUNT(*) as count
       FROM children
       GROUP BY age

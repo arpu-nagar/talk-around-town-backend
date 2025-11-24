@@ -1,7 +1,8 @@
 // sessions.js
-const express = require('express');
-const pool = require('../config/db');
-const { authenticateJWT } = require('./middleware');
+import express from 'express';
+import pool from '../config/db.js';
+import { authenticateJWT } from './middleware.js';
+
 const router = express.Router();
 
 // Start a new session
@@ -85,4 +86,4 @@ router.get('/analytics', authenticateJWT, async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

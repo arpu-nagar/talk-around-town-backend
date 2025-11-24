@@ -1,8 +1,9 @@
 // adminRoutes.js
-const express = require('express');
+import express from 'express';
+import pool from '../config/db.js';
+import { authenticateJWT, authorizeAdmin } from './middleware.js';
+
 const router = express.Router();
-const pool = require('../config/db');
-const { authenticateJWT, authorizeAdmin } = require('./middleware');
 
 // Get all users (admin only)
 router.get('/users', authenticateJWT, authorizeAdmin, async (req, res) => {
@@ -37,7 +38,7 @@ router.get('/users/:userId', authenticateJWT, authorizeAdmin, async (req, res) =
     
     // Get user's children
     const [children] = await pool.query(
-      'SELECT id, nickname, date_of_birth FROM children WHERE user_id = ?',
+      'SELECT id, nickname, age FROM children WHERE user_id = ?',
       [userId]
     );
     
@@ -181,4 +182,4 @@ router.get('/dashboard/users-timeline', authenticateJWT, authorizeAdmin, async (
   }
 });
 
-module.exports = router;
+export default router;

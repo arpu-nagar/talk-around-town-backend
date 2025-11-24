@@ -1,12 +1,13 @@
-const bcrypt = require('bcryptjs');
-const crypto = require('crypto');
-const jwt = require('jsonwebtoken');
-const pool = require('../config/db');
-const { authenticateJWT } = require('./middleware');
-const express = require('express');
-const router = express.Router();
-const nodemailer = require('nodemailer');
+import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
+import pool from '../config/db.js';
+import { authenticateJWT } from './middleware.js';
+import express from 'express';
+import nodemailer from 'nodemailer';
 import sgMail from '@sendgrid/mail';
+
+const router = express.Router();
 
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
@@ -16,10 +17,13 @@ const validateEmail = email => {
     return emailRegex.test(email);
 };
 
+// Valid caregiver types
+const VALID_CAREGIVER_TYPES = ['parent', 'grandparent', 'guardian', 'nanny', 'other_family', 'other'];
+
 // Register handler
 const register = async (req, res) => {
-    const { name, email, password, location, children } = req.body;
-    console.log('Registration request:', { name, email, location, children });
+    const { name, email, password, location, children, caregiverType } = req.body;
+    console.log('Registration request:', { name, email, location, children, caregiverType });
 
     let connection;
     try {
@@ -40,6 +44,11 @@ const register = async (req, res) => {
             return res
                 .status(400)
                 .json({ error: 'Password must be at least 8 characters long' });
+        }
+        if (caregiverType && !VALID_CAREGIVER_TYPES.includes(caregiverType)) {
+            return res
+                .status(400)
+                .json({ error: `Invalid caregiver type. Must be one of: ${VALID_CAREGIVER_TYPES.join(', ')}` });
         }
 
         // Check for existing email
@@ -62,8 +71,8 @@ const register = async (req, res) => {
 
         // Insert user
         const [userResult] = await connection.query(
-            'INSERT INTO users (name, email, password, number_of_children) VALUES (?, ?, ?, ?)',
-            [name, email, hashedPassword, numberOfChildren],
+            'INSERT INTO users (name, email, password, number_of_children, caregiver_type) VALUES (?, ?, ?, ?, ?)',
+            [name, email, hashedPassword, numberOfChildren, caregiverType || null],
         );
 
         const userId = userResult.insertId;
@@ -74,14 +83,24 @@ const register = async (req, res) => {
             Array.isArray(childrenDetails) &&
             childrenDetails.length > 0
         ) {
+            // Validate age values (must be integer 1-5)
+            for (const child of childrenDetails) {
+                if (!Number.isInteger(child.age) || child.age < 1 || child.age > 5) {
+                    await connection.rollback();
+                    return res.status(400).json({
+                        error: 'Child age must be an integer between 1 and 5'
+                    });
+                }
+            }
+
             const childrenValues = childrenDetails.map(child => [
                 userId,
                 child.nickname,
-                child.date_of_birth,
+                child.age,
             ]);
 
             await connection.query(
-                'INSERT INTO children (user_id, nickname, date_of_birth) VALUES ?',
+                'INSERT INTO children (user_id, nickname, age) VALUES ?',
                 [childrenValues],
             );
         }
@@ -181,7 +200,7 @@ const login = async (req, res) => {
 
         if (user.number_of_children > 0) {
             const [children] = await pool.query(
-                'SELECT id, nickname, date_of_birth FROM children WHERE user_id = ? ORDER BY date_of_birth',
+                'SELECT id, nickname, age FROM children WHERE user_id = ? ORDER BY age',
                 [user.id],
             );
             user.children = children;
@@ -887,4 +906,4 @@ router.post('/test-email', testEmail);
 router.delete('/delete-account', authenticateJWT, deleteAccount);
 router.post('/change-password', authenticateJWT, changePassword);
 
-module.exports = router;
+export default router;

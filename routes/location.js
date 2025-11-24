@@ -1,18 +1,14 @@
-const express = require('express');
-const axios = require('axios');
-const admin = require('firebase-admin');
-const pool = require('../config/db');
-// const { authenticateJWT } = require('./middleware');
-const { authenticateJWT } = require('./middleware');
+import express from 'express';
+import axios from 'axios';
+import admin from 'firebase-admin';
+import pool from '../config/db.js';
+import { authenticateJWT } from './middleware.js';
+import { createRequire } from 'module';
+import { GoogleAuth } from 'google-auth-library';
+
+const require = createRequire(import.meta.url);
 const serviceAccount = require('../key.json');
 const router = express.Router();
-// if (!admin.apps.length) {
-// admin.initializeApp({
-//     credential: admin.credential.applicationDefault(),
-// });
-// }
-
-const { GoogleAuth } = require('google-auth-library');
 // import serviceAccount from '../key.json';
 // import authenticateJWT from './middleware';
 // const pool = require('../config/db');
@@ -429,4 +425,4 @@ const [notifs] = await pool.query(
         }
     }
 });
-module.exports = router;
+export default router;

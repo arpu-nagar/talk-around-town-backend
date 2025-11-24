@@ -1,5 +1,5 @@
 // middleware.js
-const jwt = require('jsonwebtoken');
+import jwt from 'jsonwebtoken';
 
 // Authenticate JWT middleware
 const authenticateJWT = (req, res, next) => {
@@ -46,4 +46,4 @@ const authorizeAdmin = (req, res, next) => {
   next();
 };
 
-module.exports = { authenticateJWT, authorizeAdmin };
+export { authenticateJWT, authorizeAdmin };

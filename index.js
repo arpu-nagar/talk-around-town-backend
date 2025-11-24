@@ -26,10 +26,12 @@ import personalizationRoutes, {
     reframeAsParenting,
     safeJSONParse,
 } from './routes/personalization.js';
+import cookieParser from 'cookie-parser';
+import dotenv from 'dotenv';
+dotenv.config({ path: path.join(__dirname, '.env') });
+
 const app = express();
 app.use(cors());
-import cookieParser from 'cookie-parser';
-require('dotenv').config({ path: path.join(__dirname, '.env') });
 app.use(morgan('dev'));
 app.use(cookieParser('session'));
 app.use(body.json());
