@@ -1,5 +1,7 @@
 import express from 'express';
+import audioRoutes from './routes/audio.js';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import body from 'body-parser';
 import cors from 'cors';
 import { WebSocketServer } from 'ws';
@@ -15,6 +17,8 @@ import childrenRouter from './routes/children.js';
 import sessionRoutes from './routes/sessions.js';
 import dashboardRoutes from './routes/dashboard.js';
 import adminRoutes from './routes/adminRoutes.js';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 import personalizationRoutes, {
     buildSurveyContext,
     categoryReply,
@@ -42,6 +46,11 @@ app.use('/api/auth', authroutes);
 app.use('/api/home', user);
 app.use('/api/tips', tips);
 app.use('/api/personalization', personalizationRoutes);
+// Serve static audio files
+app.use('/audio', express.static(path.join(__dirname, 'public', 'audio')));
+
+// Audio generation routes
+app.use('/api/tips/audio', audioRoutes);
 
 // --- WS server wiring ---
 const server = http.createServer(app); // 👈 wrap express
