@@ -5,6 +5,7 @@ import pool from '../config/db.js';
 import { authenticateJWT } from './middleware.js';
 import { createRequire } from 'module';
 import { GoogleAuth } from 'google-auth-library';
+import personalizationService from '../services/personalizationService.js';
 
 const require = createRequire(import.meta.url);
 const serviceAccount = require('../key.json');
@@ -369,15 +370,49 @@ const [notifs] = await pool.query(
             });
         }
 
-        // Get tips
-        const [tips] = await pool.query(
-            'SELECT title, description FROM tips WHERE type = ? ORDER BY RAND() LIMIT 3',
-            [nearbyLocation.type],
-        );
+        // Get user's content preferences from survey
+        let contentPreferences = [];
+        try {
+            const [surveyRows] = await pool.query(
+                'SELECT content_preferences FROM user_survey_responses WHERE user_id = ? ORDER BY created_at DESC LIMIT 1',
+                [user_id]
+            );
+            if (surveyRows.length > 0 && surveyRows[0].content_preferences) {
+                contentPreferences = JSON.parse(surveyRows[0].content_preferences);
+            }
+        } catch (e) {
+            console.log('Could not fetch user preferences, using defaults:', e.message);
+        }
 
-        const tipsText = tips
-            .map(tip => `${tip.title}\n${tip.description}`)
-            .join('\n\n');
+        // Build prompt from location (same approach as parenting assistant)
+        const prompt = `${nearbyLocation.name} - ${nearbyLocation.type}`;
+
+        // Get personalized tips using the same service as the parenting assistant
+        let tips = [];
+        let tipsText = '';
+        try {
+            const result = await personalizationService.generatePersonalizedTipsForQuery(
+                user_id,
+                prompt,
+                3,
+                contentPreferences
+            );
+            tips = Array.isArray(result) ? result : (result.tips || []);
+            tipsText = tips
+                .map(tip => `${tip.title}\n${tip.body || tip.description}`)
+                .join('\n\n');
+        } catch (e) {
+            console.log('Personalization failed, falling back to generic tips:', e.message);
+            // Fallback to generic tips
+            const [fallbackTips] = await pool.query(
+                'SELECT title, description FROM tips WHERE type = ? ORDER BY RAND() LIMIT 3',
+                [nearbyLocation.type],
+            );
+            tips = fallbackTips;
+            tipsText = tips
+                .map(tip => `${tip.title}\n${tip.description}`)
+                .join('\n\n');
+        }
 
         // Send notification with unique identifier
         const notificationId = `${user_id}-${nearbyLocation.id}-${Date.now()}`;
