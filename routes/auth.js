@@ -93,14 +93,22 @@ const register = async (req, res) => {
                 }
             }
 
-            const childrenValues = childrenDetails.map(child => [
-                userId,
-                child.nickname,
-                child.age,
-            ]);
+            const childrenValues = childrenDetails.map(child => {
+                // Calculate approximate date_of_birth from age
+                const dob = new Date();
+                dob.setFullYear(dob.getFullYear() - child.age);
+                const dobString = dob.toISOString().split('T')[0]; // YYYY-MM-DD format
+
+                return [
+                    userId,
+                    child.nickname,
+                    child.age,
+                    child.dateOfBirth || dobString,
+                ];
+            });
 
             await connection.query(
-                'INSERT INTO children (user_id, nickname, age) VALUES ?',
+                'INSERT INTO children (user_id, nickname, age, date_of_birth) VALUES ?',
                 [childrenValues],
             );
         }
