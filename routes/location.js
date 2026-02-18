@@ -359,10 +359,19 @@ const [notifs] = await pool.query(
             [user_id],
         );
 
-        const deviceToken = result[0].android_token || result[0].ios_token;
-        const isIOS = !!result[0].ios_token;
-        console.log('Device token:', deviceToken);
-        console.log('Is iOS:', isIOS);
+        const androidToken = result[0].android_token;
+        const iosToken = result[0].ios_token;
+
+        // Determine which token to use and the correct platform
+        // Prefer the most recently set token (non-null one)
+        // The token registration clears the other platform's token, so only one should exist
+        const deviceToken = androidToken || iosToken;
+        const isIOS = !androidToken && !!iosToken;
+
+        console.log('Device tokens:', { androidToken: !!androidToken, iosToken: !!iosToken });
+        console.log('Selected token platform:', isIOS ? 'iOS' : 'Android');
+        console.log('Device token prefix:', deviceToken ? deviceToken.substring(0, 20) + '...' : 'none');
+
         if (!deviceToken) {
             return res.status(400).json({
                 message: 'No device token found',
@@ -460,4 +469,82 @@ const [notifs] = await pool.query(
         }
     }
 });
+
+// Debug endpoint to test notifications
+router.post('/test-notification', authenticateJWT, async (req, res) => {
+    try {
+        const user_id = req.user.id;
+
+        // Get user's device token
+        const [result] = await pool.query(
+            'SELECT android_token, ios_token FROM users WHERE id = ?',
+            [user_id],
+        );
+
+        const androidToken = result[0].android_token;
+        const iosToken = result[0].ios_token;
+        const deviceToken = androidToken || iosToken;
+        const isIOS = !androidToken && !!iosToken;
+
+        console.log('=== TEST NOTIFICATION DEBUG ===');
+        console.log('User ID:', user_id);
+        console.log('Android token exists:', !!androidToken);
+        console.log('iOS token exists:', !!iosToken);
+        console.log('Selected platform:', isIOS ? 'iOS' : 'Android');
+        console.log('Token prefix:', deviceToken ? deviceToken.substring(0, 30) : 'NO TOKEN');
+
+        if (!deviceToken) {
+            return res.status(400).json({
+                success: false,
+                message: 'No device token found for user',
+                debug: {
+                    androidToken: !!androidToken,
+                    iosToken: !!iosToken,
+                },
+            });
+        }
+
+        // Validate token first
+        const isValid = await validateFCMToken(deviceToken);
+        console.log('Token valid:', isValid);
+
+        if (!isValid) {
+            return res.status(400).json({
+                success: false,
+                message: 'Device token is invalid or expired',
+                debug: {
+                    platform: isIOS ? 'iOS' : 'Android',
+                    tokenPrefix: deviceToken.substring(0, 30),
+                },
+            });
+        }
+
+        // Send test notification
+        const response = await sendNotification(
+            deviceToken,
+            'Test Notification',
+            'This is a test notification from Talk Around Town backend.',
+            { test: 'true', timestamp: Date.now().toString() },
+            isIOS,
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: 'Test notification sent successfully',
+            debug: {
+                platform: isIOS ? 'iOS' : 'Android',
+                fcmResponse: response,
+            },
+        });
+    } catch (error) {
+        console.error('Test notification error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to send test notification',
+            error: error.message,
+            errorCode: error.errorInfo?.code,
+        });
+    }
+});
+
 export default router;
