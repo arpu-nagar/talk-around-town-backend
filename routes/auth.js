@@ -505,7 +505,7 @@ const requestPasswordReset = async (req, res) => {
             secure: false,
             auth: {
                 user: process.env.EMAIL_USER,
-                pass: process.env.EMAIL_PASS,
+                pass: process.env.GMAIL_APP_PASSWORD,
             },
         });
 
