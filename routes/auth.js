@@ -5,11 +5,8 @@ import pool from '../config/db.js';
 import { authenticateJWT } from './middleware.js';
 import express from 'express';
 import nodemailer from 'nodemailer';
-import sgMail from '@sendgrid/mail';
 
 const router = express.Router();
-
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 // Input validation helper
 const validateEmail = email => {
@@ -501,11 +498,20 @@ const requestPasswordReset = async (req, res) => {
       </div>
     `;
 
-        console.log(process.env.SENDGRID_FROM);
+        // Create Gmail transporter
+        const transporter = nodemailer.createTransport({
+            host: 'smtp.gmail.com',
+            port: 587,
+            secure: false,
+            auth: {
+                user: process.env.EMAIL_USER,
+                pass: process.env.EMAIL_PASS,
+            },
+        });
 
-        await sgMail.send({
+        await transporter.sendMail({
+            from: process.env.EMAIL_USER,
             to: email,
-            from: process.env.SENDGRID_FROM, // must be verified in SendGrid
             subject: 'Password Reset Request',
             html,
         });
@@ -515,16 +521,12 @@ const requestPasswordReset = async (req, res) => {
             success: true,
         });
     } catch (error) {
-        // Helpful SendGrid error info
-        const sgErr = error?.response?.body?.errors
-            ?.map(e => e.message)
-            .join('; ');
-        console.error('Password reset request error:', sgErr || error);
+        console.error('Password reset request error:', error);
         return res.status(500).json({
             message: 'Error processing password reset request',
             error:
                 process.env.NODE_ENV === 'development'
-                    ? sgErr || error.message
+                    ? error.message
                     : undefined,
         });
     }
