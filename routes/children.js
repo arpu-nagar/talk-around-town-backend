@@ -33,7 +33,7 @@ router.get('/children', authenticateJWT, async (req, res) => {
 router.post('/children', authenticateJWT, async (req, res) => {
     const connection = await pool.getConnection();
     try {
-        const { nickname, age } = req.body;
+        const { nickname, age, date_of_birth } = req.body;
         const user_id = req.user.id;
 
         // Validate age (must be integer 1-5)
@@ -45,14 +45,17 @@ router.post('/children', authenticateJWT, async (req, res) => {
             });
         }
 
+        // Calculate date_of_birth from age if not provided
+        const dob = date_of_birth || `${new Date().getFullYear() - age}-01-01`;
+
         // Start transaction
         await connection.beginTransaction();
 
         // Insert new child
         const [result] = await connection.query(
-            `INSERT INTO children (user_id, nickname, age)
-       VALUES (?, ?, ?)`,
-            [user_id, nickname, age],
+            `INSERT INTO children (user_id, nickname, age, date_of_birth)
+       VALUES (?, ?, ?, ?)`,
+            [user_id, nickname, age, dob],
         );
 
         // Update user's number_of_children
@@ -73,10 +76,11 @@ router.post('/children', authenticateJWT, async (req, res) => {
         });
     } catch (error) {
         await connection.rollback();
-        console.error('Error adding child:', error);
+        console.error('Error adding child:', error.message, error.code, error.sqlMessage);
         return res.status(500).json({
             success: false,
             message: 'Failed to add child',
+            error: error.sqlMessage || error.message,
         });
     } finally {
         connection.release();
