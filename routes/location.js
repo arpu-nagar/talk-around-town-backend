@@ -224,35 +224,27 @@ const sendNotification = async (deviceToken, title, body, data, isIOS) => {
       throw new Error('Invalid FCM token - removed from database');
     }
 
-    // Define your message
+    // Data-only message: no `notification` field so the OS never auto-displays.
+    // setBackgroundMessageHandler (notifee) handles display in every app state.
     const message = {
       token: deviceToken,
-      notification: {
+      data: {
+        ...(data || {}),
         title,
         body,
       },
-      data: data || {},
       android: {
         priority: 'high',
-        notification: {
-          channelId: 'location-tips',
-          priority: 'high',
-          defaultSound: true,
-        },
       },
       apns: isIOS
         ? {
             payload: {
               aps: {
-                alert: { title, body },
-                sound: 'default',
-                badge: 1,
                 'content-available': 1,
-                'mutable-content': 1,
               },
             },
             headers: {
-              'apns-priority': '10',
+              'apns-priority': '5',
             },
           }
         : {},
