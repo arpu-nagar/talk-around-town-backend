@@ -173,6 +173,7 @@ wss.on('connection', async (ws, req) => {
                     onPhase: phase =>
                         sendJSON(ws, { type: 'phase', data: phase }),
                     onTip: async tip => {
+                        if (emitted >= 3) return;
                         const scored =
                             await personalizationService.scoreSingleGeneratedTip(
                                 {
@@ -201,7 +202,7 @@ wss.on('connection', async (ws, req) => {
                     await personalizationService.getContextualPersonalizedTips(
                         userId,
                         effectivePrompt,
-                        5,
+                        3,
                         enhancedContentPrefs,
                     );
                 if (dbResult?.tips?.length) {

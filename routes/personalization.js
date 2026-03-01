@@ -202,7 +202,7 @@ router.post('/enhanced-tips', authenticateJWT, async (req, res) => {
                 await personalizationService.generatePersonalizedTipsForQuery(
                     userId,
                     effectivePrompt,
-                    5,
+                    3,
                     contentPreferences,
                 );
 
@@ -316,7 +316,8 @@ router.post('/enhanced-tips', authenticateJWT, async (req, res) => {
 router.post('/generate-tips', authenticateJWT, async (req, res) => {
     try {
         const userId = req.user.id;
-        const { prompt, count = 5, contentPreferences = [] } = req.body;
+        const { prompt, count = 3, contentPreferences = [] } = req.body;
+        const effectiveCount = Math.min(count, 3);
 
         if (!prompt) {
             return res.status(400).json({ error: 'Prompt is required' });
@@ -345,7 +346,7 @@ router.post('/generate-tips', authenticateJWT, async (req, res) => {
             await personalizationService.generatePersonalizedTipsForQuery(
                 userId,
                 effectivePrompt,
-                count,
+                effectiveCount,
                 contentPreferences,
             );
 
