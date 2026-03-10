@@ -1,9 +1,21 @@
 import express from 'express';
 import { OpenAI } from 'openai';
 import pool from '../config/db.js';
+import { authenticateJWT } from './middleware.js';
 
 const router = express.Router();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+// Ensure tip_likes table exists
+pool.query(`
+  CREATE TABLE IF NOT EXISTS tip_likes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    tip_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_user_tip (user_id, tip_id)
+  )
+`).catch(err => console.error('tip_likes table init error:', err));
 
 router.post('/get-tips', async (req, res) => {
     try {
@@ -76,6 +88,60 @@ router.post('/get-tips', async (req, res) => {
     } catch (error) {
         console.error('Error in fetching tips', error);
         return res.status(500).json({ message: 'No tips found', error: error.message });
+    }
+});
+
+// GET /tips/most-liked — top tips ranked by community likes
+router.get('/most-liked', async (req, res) => {
+    try {
+        const limit = Math.min(parseInt(req.query.limit) || 10, 50);
+        const [rows] = await pool.query(
+            `SELECT t.*, COUNT(tl.id) AS likes_count
+             FROM tips t
+             LEFT JOIN tip_likes tl ON t.id = tl.tip_id
+             GROUP BY t.id
+             ORDER BY likes_count DESC, t.id ASC
+             LIMIT ?`,
+            [limit]
+        );
+        res.json(rows);
+    } catch (error) {
+        console.error('Error fetching most liked tips:', error);
+        res.status(500).json({ message: 'Failed to fetch most liked tips' });
+    }
+});
+
+// POST /tips/:id/like — record a user like (authenticated)
+router.post('/:id/like', authenticateJWT, async (req, res) => {
+    try {
+        const tipId = parseInt(req.params.id);
+        const userId = req.user.id;
+        if (!tipId) return res.status(400).json({ message: 'Invalid tip id' });
+        await pool.query(
+            'INSERT IGNORE INTO tip_likes (user_id, tip_id) VALUES (?, ?)',
+            [userId, tipId]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error liking tip:', error);
+        res.status(500).json({ message: 'Failed to like tip' });
+    }
+});
+
+// DELETE /tips/:id/unlike — remove a user like (authenticated)
+router.delete('/:id/unlike', authenticateJWT, async (req, res) => {
+    try {
+        const tipId = parseInt(req.params.id);
+        const userId = req.user.id;
+        if (!tipId) return res.status(400).json({ message: 'Invalid tip id' });
+        await pool.query(
+            'DELETE FROM tip_likes WHERE user_id = ? AND tip_id = ?',
+            [userId, tipId]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error unliking tip:', error);
+        res.status(500).json({ message: 'Failed to unlike tip' });
     }
 });
 

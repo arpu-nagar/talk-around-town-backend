@@ -541,64 +541,29 @@ router.post('/survey', authenticateJWT, async (req, res) => {
         }
 
         const {
-            contentPreferences = [],
-            challengeAreas = [],
-            parentingGoals = [],
-            engagementFrequency,
-            currentChallenge,
+            childInterests,
             additionalNotes,
         } = surveyData;
 
-        // Validate required fields
-        if (!engagementFrequency) {
-            return res
-                .status(400)
-                .json({ error: 'Engagement frequency is required' });
-        }
-
-        const validFrequencies = [
-            'daily',
-            'few-times-week',
-            'weekly',
-            'on-demand',
-        ];
-        if (!validFrequencies.includes(engagementFrequency)) {
-            return res.status(400).json({
-                error: 'Invalid engagement frequency',
-                validOptions: validFrequencies,
-            });
-        }
-
         console.log(`💾 Saving survey for user ${userId}:`, {
-            contentPreferences: contentPreferences.length,
-            challengeAreas: challengeAreas.length,
-            parentingGoals: parentingGoals.length,
-            engagementFrequency,
+            hasChildInterests: !!childInterests,
+            hasAdditionalNotes: !!additionalNotes,
         });
 
         // Save survey response
         await pool.query(
             `
-      INSERT INTO user_survey_responses 
-      (user_id, content_preferences, challenge_areas, parenting_goals, 
-       engagement_frequency, current_challenge, additional_notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO user_survey_responses
+      (user_id, current_challenge, additional_notes)
+      VALUES (?, ?, ?)
       ON DUPLICATE KEY UPDATE
-      content_preferences = VALUES(content_preferences),
-      challenge_areas = VALUES(challenge_areas),
-      parenting_goals = VALUES(parenting_goals),
-      engagement_frequency = VALUES(engagement_frequency),
       current_challenge = VALUES(current_challenge),
       additional_notes = VALUES(additional_notes),
       updated_at = CURRENT_TIMESTAMP
     `,
             [
                 userId,
-                JSON.stringify(contentPreferences),
-                JSON.stringify(challengeAreas),
-                JSON.stringify(parentingGoals),
-                engagementFrequency,
-                currentChallenge || null,
+                childInterests || null,
                 additionalNotes || null,
             ],
         );
@@ -614,11 +579,7 @@ router.post('/survey', authenticateJWT, async (req, res) => {
             message: 'Survey saved successfully',
             userId,
             surveyData: {
-                contentPreferences,
-                challengeAreas,
-                parentingGoals,
-                engagementFrequency,
-                hasCurrentChallenge: !!currentChallenge,
+                hasChildInterests: !!childInterests,
                 hasAdditionalNotes: !!additionalNotes,
             },
         });
