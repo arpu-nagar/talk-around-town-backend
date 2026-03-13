@@ -437,6 +437,55 @@ router.post('/ai-interactions/batch', authenticateJWT, async (req, res) => {
     }
 });
 
+// Save personalization survey
+router.post('/survey', authenticateJWT, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { surveyData } = req.body;
+
+        if (!surveyData) {
+            return res.status(400).json({ error: 'Survey data is required' });
+        }
+
+        const { childInterests, additionalNotes } = surveyData;
+        const textParts = [];
+        if (childInterests) textParts.push(`Child interests: ${childInterests}`);
+        if (additionalNotes) textParts.push(additionalNotes);
+
+        if (textParts.length === 0) {
+            return res.status(400).json({ error: 'Please provide at least one survey response' });
+        }
+
+        const combinedText = textParts.join('. ');
+
+        // Generate embedding from the free-text survey response
+        const embedding = await personalizationService.generateQueryEmbedding(combinedText);
+
+        // Replace any existing survey embeddings for this user
+        await pool.query(
+            'DELETE FROM survey_preference_embeddings WHERE user_id = ?',
+            [userId],
+        );
+
+        await pool.query(
+            `INSERT INTO survey_preference_embeddings (user_id, preference_type, preference_value, embedding)
+             VALUES (?, ?, ?, ?)`,
+            [userId, 'content', combinedText.substring(0, 255), JSON.stringify(embedding)],
+        );
+
+        // Blend survey embedding with any existing interaction embeddings
+        await personalizationService.updateCombinedPreferenceProfile(userId);
+
+        return res.status(200).json({ success: true });
+    } catch (error) {
+        console.error('Error saving survey:', error);
+        return res.status(500).json({
+            error: 'Failed to save survey',
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+        });
+    }
+});
+
 // Profile summary
 router.get('/profile', authenticateJWT, async (req, res) => {
     try {
