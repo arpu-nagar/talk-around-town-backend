@@ -204,7 +204,7 @@ router.get('/export/excel', authenticateJWT, authorizeAdmin, async (req, res) =>
     `);
 
     const [notifications] = await pool.query(`
-      SELECT n.id, n.timestamp, u.name AS user_name, u.email AS user_email, l.name AS location_name
+      SELECT CONCAT(n.user_id, '-', n.loc_id, '-', n.timestamp) AS id, n.timestamp, u.name AS user_name, u.email AS user_email, l.name AS location_name
       FROM notifications n
       JOIN users u ON n.user_id = u.id
       JOIN locations l ON n.loc_id = l.id
