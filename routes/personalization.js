@@ -570,29 +570,7 @@ router.post('/survey', authenticateJWT, async (req, res) => {
             ],
         );
 
-        // Generate embeddings for structured survey preferences (old format, no-ops for new format)
-        await generateSurveyEmbeddings(userId, surveyData);
-
-        // Generate embedding from free-text fields (new survey format)
-        const freeTextParts = [];
-        if (childInterests) freeTextParts.push(`Child interests: ${childInterests}`);
-        if (additionalNotes) freeTextParts.push(additionalNotes);
-        if (freeTextParts.length > 0) {
-            const combinedText = freeTextParts.join('. ');
-            try {
-                const embedding = await personalizationService.generateQueryEmbedding(combinedText);
-                await pool.query(
-                    `INSERT INTO survey_preference_embeddings (user_id, preference_type, preference_value, embedding)
-                     VALUES (?, ?, ?, ?)
-                     ON DUPLICATE KEY UPDATE embedding = VALUES(embedding)`,
-                    [userId, 'content', combinedText.substring(0, 255), JSON.stringify(embedding)],
-                );
-            } catch (embErr) {
-                console.error('[Survey] Failed to generate free-text embedding:', embErr.message);
-            }
-        }
-
-        // Update combined preference profile
+        // Update combined preference profile from any existing interaction embeddings
         await updateCombinedPreferenceProfile(userId);
 
         res.status(200).json({
