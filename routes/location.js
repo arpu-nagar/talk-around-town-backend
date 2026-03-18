@@ -78,6 +78,18 @@ router.post('/addLocation', authenticateJWT, async (req, res) => {
             return res.status(400).json({ error: 'All fields are required' });
         }
 
+        // Check for duplicate locations within 100m
+        const [existing] = await pool.query(
+            'SELECT lat, `long` FROM locations WHERE user_id = ?',
+            [user_id],
+        );
+        for (const loc of existing) {
+            const dist = getDistanceFromLatLonInKm(latitude, longitude, loc.lat, loc.long);
+            if (dist < 0.1) {
+                return res.status(400).json({ error: 'A location already exists within 100 metres of this point.' });
+            }
+        }
+
         // Insert the new location into the database
         const [result] = await pool.query(
             'INSERT INTO locations (user_id, lat, `long`, type, name, `desc`) VALUES (?, ?, ?, ?, ?, ?)',
@@ -389,8 +401,28 @@ const [notifs] = await pool.query(
             console.log('Could not fetch user preferences, using defaults:', e.message);
         }
 
-        // Build prompt from location (same approach as parenting assistant)
-        const prompt = `${nearbyLocation.name} - ${nearbyLocation.type}`;
+        // Fetch user's children for child context in prompt
+        let childContext = '';
+        try {
+            const [childRows] = await pool.query(
+                'SELECT nickname, age FROM children WHERE user_id = ?',
+                [user_id],
+            );
+            if (childRows.length > 0) {
+                childContext = childRows
+                    .map(c => c.nickname
+                        ? `${c.nickname}: ${c.age} year${c.age === 1 ? '' : 's'} old`
+                        : `${c.age} year${c.age === 1 ? '' : 's'} old`)
+                    .join(', ');
+            }
+        } catch (e) {
+            console.log('Could not fetch children for prompt:', e.message);
+        }
+
+        // Build prompt from location + child context
+        const prompt = childContext
+            ? `${nearbyLocation.name} - ${nearbyLocation.type} (Focus on: ${childContext})`
+            : `${nearbyLocation.name} - ${nearbyLocation.type}`;
 
         // Get personalized tips using the same service as the parenting assistant
         let tips = [];
