@@ -556,8 +556,8 @@ router.post('/survey', authenticateJWT, async (req, res) => {
         await pool.query(
             `
       INSERT INTO user_survey_responses
-      (user_id, current_challenge, additional_notes, content_preferences)
-      VALUES (?, ?, ?, '[]')
+      (user_id, current_challenge, additional_notes, content_preferences, challenge_areas, parenting_goals, engagement_frequency)
+      VALUES (?, ?, ?, '[]', '[]', '[]', 'as_needed')
       ON DUPLICATE KEY UPDATE
       current_challenge = VALUES(current_challenge),
       additional_notes = VALUES(additional_notes),
