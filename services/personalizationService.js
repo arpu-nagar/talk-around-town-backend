@@ -362,9 +362,7 @@ class PersonalizationService {
                         id: row.tip_id,
                         title: row.title,
                         body: row.description,
-                        details: hasPersonalization
-                            ? `Personalized ${row.type} tip for "${query}"`
-                            : `${row.type} tip for "${query}"`,
+                        details: '',
                         categories: [row.type].filter(Boolean),
                         query_relevance: Math.round(qSim * 1000) / 1000,
                         personal_match: Math.round(personal * 1000) / 1000,

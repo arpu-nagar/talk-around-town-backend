@@ -19,7 +19,8 @@ const VALID_CAREGIVER_TYPES = ['parent', 'grandparent', 'guardian', 'nanny', 'ot
 
 // Register handler
 const register = async (req, res) => {
-    const { name, email, password, location, children, caregiverType } = req.body;
+    const { name, email, password, location, children } = req.body;
+    const caregiverType = children?.caregiverType;
     console.log('Registration request:', { name, email, location, children, caregiverType });
 
     let connection;
@@ -100,7 +101,7 @@ const register = async (req, res) => {
                     userId,
                     child.nickname,
                     child.age,
-                    child.dateOfBirth || dobString,
+                    child.date_of_birth || dobString,
                 ];
             });
 

@@ -403,17 +403,27 @@ const [notifs] = await pool.query(
                 contentPreferences
             );
             tips = Array.isArray(result) ? result : (result.tips || []);
+            // If personalization returned nothing, fall through to the DB fallback
+            if (tips.length === 0) throw new Error('Personalization returned empty tips');
             tipsText = tips
                 .map(tip => `${tip.title}\n${tip.body || tip.description}`)
                 .join('\n\n');
         } catch (e) {
             console.log('Personalization failed, falling back to generic tips:', e.message);
-            // Fallback to generic tips
+            // Fallback to type-specific tips
             const [fallbackTips] = await pool.query(
                 'SELECT title, description FROM tips WHERE type = ? ORDER BY RAND() LIMIT 3',
                 [nearbyLocation.type],
             );
             tips = fallbackTips;
+            // If no tips exist for this location type, pull from any type
+            if (tips.length === 0) {
+                console.log(`No tips found for type '${nearbyLocation.type}', using general tips`);
+                const [generalTips] = await pool.query(
+                    'SELECT title, description FROM tips ORDER BY RAND() LIMIT 3',
+                );
+                tips = generalTips;
+            }
             tipsText = tips
                 .map(tip => `${tip.title}\n${tip.description}`)
                 .join('\n\n');

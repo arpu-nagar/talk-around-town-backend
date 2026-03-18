@@ -10,7 +10,7 @@ router.get('/children', authenticateJWT, async (req, res) => {
         const user_id = req.user.id;
 
         const [rows] = await pool.query(
-            `SELECT id, nickname, age
+            `SELECT id, nickname, age, date_of_birth
        FROM children
        WHERE user_id = ?`,
             [user_id],
@@ -125,12 +125,14 @@ router.post('/updateChildren', authenticateJWT, async (req, res) => {
             }
 
             // Update child information
+            const updatedDob = `${new Date().getFullYear() - child.age}-01-01`;
             await connection.query(
                 `UPDATE children
          SET nickname = ?,
-             age = ?
+             age = ?,
+             date_of_birth = ?
          WHERE id = ? AND user_id = ?`,
-                [child.nickname, child.age, child.id, user_id],
+                [child.nickname, child.age, updatedDob, child.id, user_id],
             );
         }
 
@@ -171,9 +173,6 @@ router.delete('/children/:id', authenticateJWT, async (req, res) => {
             'SELECT id FROM children WHERE id = ? AND user_id = ?',
             [childId, user_id],
         );
-
-        const data = await connection.query('SELECT * FROM children')
-        console.log(data)
 
         if (childRows.length === 0) {
             await connection.rollback();
