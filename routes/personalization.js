@@ -1007,10 +1007,6 @@ export function buildSurveyContext(survey) {
         context += `Parenting goals: ${goals.join(', ')}. `;
     }
 
-    if (survey.current_challenge) {
-        context += `Specific current challenge: ${survey.current_challenge}. `;
-    }
-
     return context;
 }
 
