@@ -809,8 +809,19 @@ class PersonalizationService {
                         messages: [
                             {
                                 role: 'system',
-                                content:
-                                    'You are a concise parenting education specialist. Only output valid JSON (array). Stay within the 4 domains. No prohibited topics.',
+                                content: `You are ENACT, a children's early education assistant. You ONLY generate tips in EXACTLY these 4 domains:
+
+1. Language Development – communication, vocabulary, storytelling, speech, conversation
+2. Early Science Skills – exploration, observation, nature, curiosity, experiments
+3. Literacy Foundations – reading, books, letters, phonics, alphabet, writing
+4. Social-Emotional Learning – emotions, empathy, friendships, self-regulation, kindness
+
+ABSOLUTE RULES — NO EXCEPTIONS:
+- If the user query is about ANYTHING outside these 4 domains, output an empty array: []
+- NEVER generate tips about: discipline, punishment, behavior management, sleep, bedtime, eating, nutrition, potty training, screen time, medical topics, legal topics, travel, homework help, or any adult topics
+- NEVER generate tips about drugs, violence, weapons, or illegal activity
+- If you are unsure whether a topic fits, output []
+- Only output valid JSON (array). No explanation text, no markdown.`,
                             },
                             { role: 'user', content: userMsg },
                         ],
@@ -901,7 +912,20 @@ class PersonalizationService {
                     };
                 });
 
-                const cleanTips = formattedTips.map(t => ({
+                const ALLOWED_DOMAINS = new Set([
+                    'Language Development',
+                    'Early Science Skills',
+                    'Literacy Foundations',
+                    'Social-Emotional Learning',
+                ]);
+
+                // Post-generation domain filter: discard any tip not tagged to an allowed domain
+                const domainFilteredTips = formattedTips.filter(t => {
+                    const cat = Array.isArray(t.categories) ? t.categories[0] : '';
+                    return ALLOWED_DOMAINS.has(cat);
+                });
+
+                const cleanTips = domainFilteredTips.map(t => ({
                     ...t,
                     title: sanitizeTipText(t.title),
                     body: sanitizeTipText(t.body),
@@ -909,7 +933,7 @@ class PersonalizationService {
                 }));
 
                 console.log(
-                    `✅ Successfully generated ${cleanTips.length} tight AI tips for "${query}"`,
+                    `✅ Successfully generated ${cleanTips.length} domain-filtered AI tips for "${query}" (${formattedTips.length - cleanTips.length} discarded as off-domain)`,
                 );
                 return cleanTips;
             } catch (error) {
