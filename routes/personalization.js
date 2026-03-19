@@ -7,7 +7,6 @@ import {
 } from '../utils/strictDomains.js';
 import pool from '../config/db.js';
 import {
-    validateParentingQuery,
     CATEGORY_RESPONSES,
 } from '../utils/parentingGuardrails.js';
 
@@ -175,20 +174,19 @@ router.post('/enhanced-tips', authenticateJWT, async (req, res) => {
             return res.status(400).json({ error: 'Prompt is required' });
         }
 
-        // Soft override handling
-        let effectivePrompt = prompt;
-        const v = validateParentingQuery(prompt);
+        // Strict 4-domain validation: Language Development, Early Science Skills,
+        // Literacy Foundations, Social-Emotional Learning — nothing else.
+        const v = isStrictlyInScope(prompt);
         if (!v.isValid) {
-            if (looksLikeParentingPrompt(prompt)) {
-                effectivePrompt = reframeAsParenting(
-                    prompt,
-                    'This question is about my child. Provide age-appropriate, safe, practical parenting strategies.',
-                );
-            } else {
-                const { status, payload } = categoryReply(v.type, prompt);
-                return res.status(status).json(payload);
-            }
+            return res.status(400).json({
+                error: 'out_of_scope',
+                message: REJECTION_MESSAGE,
+                isParentingRelated: false,
+                originalQuery: prompt,
+            });
         }
+
+        const effectivePrompt = prompt;
 
         console.log(
             `✅ Validated parenting query (mode: ${generateMode}) original="${prompt}" effective="${effectivePrompt}"`,
@@ -323,20 +321,19 @@ router.post('/generate-tips', authenticateJWT, async (req, res) => {
             return res.status(400).json({ error: 'Prompt is required' });
         }
 
-        // Soft override handling
-        let effectivePrompt = prompt;
-        const v = validateParentingQuery(prompt);
+        // Strict 4-domain validation: Language Development, Early Science Skills,
+        // Literacy Foundations, Social-Emotional Learning — nothing else.
+        const v = isStrictlyInScope(prompt);
         if (!v.isValid) {
-            if (looksLikeParentingPrompt(prompt)) {
-                effectivePrompt = reframeAsParenting(
-                    prompt,
-                    'This question is about my child. Provide age-appropriate, safe, practical parenting strategies.',
-                );
-            } else {
-                const { status, payload } = categoryReply(v.type, prompt);
-                return res.status(status).json(payload);
-            }
+            return res.status(400).json({
+                error: 'out_of_scope',
+                message: REJECTION_MESSAGE,
+                isParentingRelated: false,
+                originalQuery: prompt,
+            });
         }
+
+        const effectivePrompt = prompt;
 
         console.log(
             `🤖 AI generation request (original="${prompt}", effective="${effectivePrompt}") user=${userId}`,
@@ -682,20 +679,19 @@ router.post('/enhanced-tips-survey', authenticateJWT, async (req, res) => {
             return res.status(400).json({ error: 'Prompt is required' });
         }
 
-        // Soft override handling
-        let effectivePrompt = prompt;
+        // Strict 4-domain validation: Language Development, Early Science Skills,
+        // Literacy Foundations, Social-Emotional Learning — nothing else.
         const v = isStrictlyInScope(prompt);
         if (!v.isValid) {
-            if (looksLikeParentingPrompt(prompt)) {
-                effectivePrompt = reframeAsParenting(
-                    prompt,
-                    'This question is about my child. Strictly Provide age-appropriate, safe, practical parenting strategies.',
-                );
-            } else {
-                const { status, payload } = categoryReply(v.type, prompt);
-                return res.status(status).json(payload);
-            }
+            return res.status(400).json({
+                error: 'out_of_scope',
+                message: REJECTION_MESSAGE,
+                isParentingRelated: false,
+                originalQuery: prompt,
+            });
         }
+
+        const effectivePrompt = prompt;
 
         console.log(
             `✅ Validated parenting query (survey) mode=${generateMode} original="${prompt}" effective="${effectivePrompt}"`,

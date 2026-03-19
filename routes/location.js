@@ -423,10 +423,10 @@ const [notifs] = await pool.query(
             console.log('Could not fetch children for prompt:', e.message);
         }
 
-        // Build prompt from location + child context
+        // Build prompt scoped to the 4 allowed domains
         const prompt = childContext
-            ? `${nearbyLocation.type} learning activities and tips for children (${childContext}) at ${nearbyLocation.name}`
-            : `${nearbyLocation.type} learning activities and parenting tips at ${nearbyLocation.name}`;
+            ? `Language development, literacy, science exploration, and social-emotional learning activities at ${nearbyLocation.name} for children (${childContext})`
+            : `Language development, literacy, science exploration, and social-emotional learning activities at ${nearbyLocation.name}`;
 
         // Get personalized tips using the same service as the parenting assistant
         let tips = [];
