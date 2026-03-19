@@ -1,5 +1,16 @@
 // Strict domain definitions - ONLY these 4 domains are allowed
 
+// Child-related terms required for any query to pass scope check
+const CHILD_TERMS = [
+  'baby', 'infant', 'newborn', 'toddler', 'preschool', 'kid', 'kids',
+  'child', 'children', 'little one', 'my son', 'my daughter', 'my boy',
+  'my girl', 'my kid', 'my child', 'my toddler', 'my baby',
+  '1-year-old', '2-year-old', '3-year-old', '4-year-old', '5-year-old',
+  '1 year old', '2 year old', '3 year old', '4 year old', '5 year old',
+  '1yo', '2yo', '3yo', '4yo', '5yo',
+  '18 month', '24 month', '36 month',
+];
+
 export const ALLOWED_DOMAINS = {
     'Language Development': {
       keywords: [
@@ -85,7 +96,7 @@ export const ALLOWED_DOMAINS = {
     /\b(cocaine|heroin|meth(amphetamine)?|fentanyl|mdma|lsd|ecstasy|weed|marijuana|cannabis|opioid|crack|xanax|adderall|drug|narcotics?|overdose|vape|vaping)\b/i,
 
   // Violence / weapons (never allowed)
-    /\b(kill|murder|shoot|stab|gun|weapon|bomb|assault|abuse|trafficking)\b/i,
+    /\b(beat|hit|harm|hurt|kill|murder|shoot|stab|gun|weapon|bomb|assault|abuse|trafficking|punish|spank|slap|smack|choke|strangle)\b/i,
 
   // Adult / sexual (never allowed)
     /\b(porn|sex(?:ual)?|nude|naked|onlyfans|fetish|masturbat)\b/i,
@@ -106,7 +117,7 @@ export const ALLOWED_DOMAINS = {
   
   export function isStrictlyInScope(query) {
     const q = String(query || '').toLowerCase();
-    
+
     // 1. Check for explicitly out-of-scope topics
     for (const pattern of OUT_OF_SCOPE_TOPICS) {
       if (pattern.test(q)) {
@@ -117,39 +128,50 @@ export const ALLOWED_DOMAINS = {
         };
       }
     }
-    
-    // 2. Must match at least ONE of our 4 domains
+
+    // 2. Must contain at least one child-related term
+    const hasChildTerm = CHILD_TERMS.some(term => q.includes(term));
+    if (!hasChildTerm) {
+      return {
+        isValid: false,
+        reason: 'no_child_context',
+        message: 'Please ask about one of our 4 domains for your child: Language Development, Early Science Skills, Literacy Foundations, or Social-Emotional Learning.'
+      };
+    }
+
+    // 3. Must clearly match at least ONE of our 4 domains (threshold raised to 3)
     let matchedDomain = null;
     let maxMatches = 0;
-    
+
     for (const [domain, config] of Object.entries(ALLOWED_DOMAINS)) {
       let matches = 0;
-      
+
       // Check keyword matches
       for (const keyword of config.keywords) {
         if (q.includes(keyword)) matches++;
       }
-      
+
       // Check pattern matches
       for (const pattern of config.patterns) {
         if (pattern.test(q)) matches += 2; // patterns worth more
       }
-      
+
       if (matches > maxMatches) {
         maxMatches = matches;
         matchedDomain = domain;
       }
     }
-    
-    // Require at least 2 matches to be confident it's in-domain
-    if (maxMatches < 2) {
+
+    // Require at least 3 matches to be confident it's in-domain
+    // (1 pattern match = 2pts, so we need 1 pattern + 1 keyword, or 3 keywords)
+    if (maxMatches < 3) {
       return {
         isValid: false,
         reason: 'unclear_domain',
         message: 'Please ask about Language Development, Early Science Skills, Literacy Foundations, or Social-Emotional Learning.'
       };
     }
-    
+
     return {
       isValid: true,
       domain: matchedDomain,

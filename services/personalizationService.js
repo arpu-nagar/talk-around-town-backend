@@ -306,15 +306,14 @@ class PersonalizationService {
 
             // Get tip embeddings from MySQL (excluding already interacted)
             const excludeIds = (interacted || []).map(r => r.tip_id).filter(Boolean);
-            const excludePlaceholders = excludeIds.length 
-                ? `AND t.id NOT IN (${excludeIds.map(() => '?').join(',')})` 
-                : '';
 
+            const domainPlaceholders = `'Language Development','Early Science Skills','Literacy Foundations','Social-Emotional Learning'`;
             const [tipEmbeddings] = await pool.query(
                 `SELECT te.tip_id, te.embedding, t.title, t.description, t.type
                  FROM tip_embeddings te
                  JOIN tips t ON te.tip_id = t.id
-                 WHERE 1=1 ${excludePlaceholders}
+                 WHERE t.type IN (${domainPlaceholders})
+                 ${excludeIds.length ? `AND t.id NOT IN (${excludeIds.map(() => '?').join(',')})` : ''}
                  LIMIT ?`,
                 [...excludeIds, Math.max(limit * 5, 50)]
             );
@@ -384,8 +383,20 @@ class PersonalizationService {
                 };
             }
 
+            // Domain post-filter: only return tips from the 4 allowed domains
+            const ALLOWED_DOMAINS_SET = new Set([
+                'Language Development',
+                'Early Science Skills',
+                'Literacy Foundations',
+                'Social-Emotional Learning',
+            ]);
+            const domainFiltered = recommendations.filter(r => {
+                const cat = Array.isArray(r.categories) ? r.categories[0] : '';
+                return ALLOWED_DOMAINS_SET.has(cat);
+            });
+
             // Sort: strong on-topic first, then query relevance, then blended score
-            recommendations.sort((a, b) => {
+            domainFiltered.sort((a, b) => {
                 if (a.__is_strong_match && !b.__is_strong_match) return -1;
                 if (!a.__is_strong_match && b.__is_strong_match) return 1;
                 if (b.query_relevance !== a.query_relevance)
@@ -393,7 +404,7 @@ class PersonalizationService {
                 return b.similarity_score - a.similarity_score;
             });
 
-            const finalTips = recommendations.slice(0, limit);
+            const finalTips = domainFiltered.slice(0, limit);
             return {
                 tips: finalTips,
                 isPersonalized: hasPersonalization,
@@ -480,6 +491,7 @@ class PersonalizationService {
                 `SELECT te.tip_id, te.embedding, t.title, t.description, t.type
                  FROM tip_embeddings te
                  JOIN tips t ON te.tip_id = t.id
+                 WHERE t.type IN ('Language Development','Early Science Skills','Literacy Foundations','Social-Emotional Learning')
                  LIMIT 20`
             );
 
