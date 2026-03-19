@@ -120,13 +120,15 @@ wss.on('connection', async (ws, req) => {
             let effectivePrompt = prompt;
             const v = isStrictlyInScope(prompt);
             if (!v.isValid) {
-                if (looksLikeParentingPrompt(prompt)) {
+                // Only reframe when the query is unclear but not dangerous.
+                // NEVER reframe out_of_scope (violence, drugs, abuse, etc.) or no_child_context.
+                if (v.reason === 'unclear_domain' && looksLikeParentingPrompt(prompt)) {
                     effectivePrompt = reframeAsParenting(
                         prompt,
                         'This question is about my child. Strictly provide age-appropriate, safe, practical parenting strategies.',
                     );
                 } else {
-                    const { status, payload } = categoryReply(v.type, prompt);
+                    const { status, payload } = categoryReply(v.reason ?? v.type, prompt);
                     sendJSON(ws, { type: 'out_of_scope', status, payload });
                     return ws.close();
                 }
