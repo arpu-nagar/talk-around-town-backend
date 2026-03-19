@@ -262,8 +262,12 @@ const sendNotification = async (deviceToken, title, body, data, isIOS) => {
         }
       : {
           token: deviceToken,
+          notification: { title, body },
           data: { ...(data || {}), title, body },
-          android: { priority: 'high' },
+          android: {
+            priority: 'high',
+            notification: { channelId: 'location-tips', sound: 'default' },
+          },
         };
 
     console.log('Sending message:', JSON.stringify(message, null, 2));
@@ -421,8 +425,8 @@ const [notifs] = await pool.query(
 
         // Build prompt from location + child context
         const prompt = childContext
-            ? `Parent has just arrived at "${nearbyLocation.name}", a ${nearbyLocation.type}. Their children are: ${childContext}. Give age-appropriate activity and learning tips for this location.`
-            : `Parent has just arrived at "${nearbyLocation.name}", a ${nearbyLocation.type}. Give practical parenting tips and activity ideas suited to this type of location.`;
+            ? `${nearbyLocation.type} learning activities and tips for children (${childContext}) at ${nearbyLocation.name}`
+            : `${nearbyLocation.type} learning activities and parenting tips at ${nearbyLocation.name}`;
 
         // Get personalized tips using the same service as the parenting assistant
         let tips = [];
