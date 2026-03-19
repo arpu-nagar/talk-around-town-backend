@@ -7,8 +7,18 @@ const CHILD_TERMS = [
   'my girl', 'my kid', 'my child', 'my toddler', 'my baby',
   '1-year-old', '2-year-old', '3-year-old', '4-year-old', '5-year-old',
   '1 year old', '2 year old', '3 year old', '4 year old', '5 year old',
+  '1 years old', '2 years old', '3 years old', '4 years old', '5 years old',
   '1yo', '2yo', '3yo', '4yo', '5yo',
   '18 month', '24 month', '36 month',
+  '18 months', '24 months', '36 months',
+];
+
+// Age regex patterns to catch formats like "2 years old", "18 months old", "3yr", etc.
+const CHILD_AGE_PATTERNS = [
+  /\b\d{1,2}\s?(?:yo|yr|yrs|years?\s*old)\b/i,
+  /\b\d{1,2}\s?(?:months?)\s*old\b/i,
+  /\b\d{1,2}\s?[-\s]year[-\s]old\b/i,
+  /focus\s+on\s*:/i,  // app-injected child context: "Focus on: Pras: 2 years old"
 ];
 
 export const ALLOWED_DOMAINS = {
@@ -129,8 +139,9 @@ export const ALLOWED_DOMAINS = {
       }
     }
 
-    // 2. Must contain at least one child-related term
-    const hasChildTerm = CHILD_TERMS.some(term => q.includes(term));
+    // 2. Must contain at least one child-related term or age pattern
+    const hasChildTerm = CHILD_TERMS.some(term => q.includes(term))
+      || CHILD_AGE_PATTERNS.some(re => re.test(q));
     if (!hasChildTerm) {
       return {
         isValid: false,
