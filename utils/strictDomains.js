@@ -81,7 +81,19 @@ export const ALLOWED_DOMAINS = {
     // Travel/logistics (not in our domains)
     /\b(travel|vacation|flight|hotel|car seat|stroller)\b/i,
     
-    // Medical/health (never allowed - legal risk)
+    // Drugs / substances (never allowed)
+    /\b(cocaine|heroin|meth(amphetamine)?|fentanyl|mdma|lsd|ecstasy|weed|marijuana|cannabis|opioid|crack|xanax|adderall|drug|narcotics?|overdose|vape|vaping)\b/i,
+
+  // Violence / weapons (never allowed)
+    /\b(kill|murder|shoot|stab|gun|weapon|bomb|assault|abuse|trafficking)\b/i,
+
+  // Adult / sexual (never allowed)
+    /\b(porn|sex(?:ual)?|nude|naked|onlyfans|fetish|masturbat)\b/i,
+
+  // Self-harm (never allowed)
+    /\b(suicide|self[-\s]?harm|kill myself|end my life)\b/i,
+
+  // Medical/health (never allowed - legal risk)
     /\b(diagnos|symptom|treatment|medicine|medication|doctor|illness|disease|injury|medical)\b/i,
     /\b(fever|rash|cough|cold|flu|allergy|asthma|adhd|autism|delay)\b/i,
     
