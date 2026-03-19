@@ -421,8 +421,8 @@ const [notifs] = await pool.query(
 
         // Build prompt from location + child context
         const prompt = childContext
-            ? `${nearbyLocation.name} - ${nearbyLocation.type} (Focus on: ${childContext})`
-            : `${nearbyLocation.name} - ${nearbyLocation.type}`;
+            ? `Parent has just arrived at "${nearbyLocation.name}", a ${nearbyLocation.type}. Their children are: ${childContext}. Give age-appropriate activity and learning tips for this location.`
+            : `Parent has just arrived at "${nearbyLocation.name}", a ${nearbyLocation.type}. Give practical parenting tips and activity ideas suited to this type of location.`;
 
         // Get personalized tips using the same service as the parenting assistant
         let tips = [];
