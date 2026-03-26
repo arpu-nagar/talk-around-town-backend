@@ -287,6 +287,7 @@ const sendNotification = async (deviceToken, title, body, data, isIOS) => {
 };
 const notificationCache = new Map();
 
+
 router.post('/', authenticateJWT, async (req, res) => {
     const requestId = `${req.user.id}-${Date.now()}`;
 
