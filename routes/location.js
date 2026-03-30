@@ -304,8 +304,10 @@ router.post('/', authenticateJWT, async (req, res) => {
         // Check if there's a pending request for this user
         if (notificationCache.has(user_id)) {
             const lastRequest = notificationCache.get(user_id);
-            if (Date.now() - lastRequest < 5000) {
-                // 5 second cooldown
+            if (Date.now() - lastRequest < 60000) {
+                // 60 second cooldown — must be longer than AI+FCM processing time
+                // to prevent BackgroundFetch firing while a foreground request is
+                // still awaiting its DB insert
                 return res.status(200).json({
                     message: 'Request throttled',
                     status: 'throttled',
