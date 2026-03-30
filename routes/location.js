@@ -262,11 +262,9 @@ const sendNotification = async (deviceToken, title, body, data, isIOS) => {
         }
       : {
           token: deviceToken,
-          notification: { title, body },
           data: { ...(data || {}), title, body },
           android: {
             priority: 'high',
-            notification: { channelId: 'location-tips', sound: 'default' },
           },
         };
 
