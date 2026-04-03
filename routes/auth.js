@@ -885,6 +885,28 @@ const getDeviceTokens = async (req, res) => {
     }
 };
 
+const checkEmail = async (req, res) => {
+    const { email } = req.query;
+
+    if (!email) {
+        return res.status(400).json({ error: 'Email query parameter is required' });
+    }
+    if (!validateEmail(email)) {
+        return res.status(400).json({ error: 'Invalid email format' });
+    }
+
+    try {
+        const [rows] = await pool.query(
+            'SELECT id FROM users WHERE email = ?',
+            [email],
+        );
+        return res.status(200).json({ exists: rows.length > 0 });
+    } catch (error) {
+        console.error('Check email error:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
 // Routes
 router.post('/register', register);
 router.post('/login', login);
@@ -898,5 +920,6 @@ router.post('/reset-password', resetPassword);
 router.post('/test-email', testEmail);
 router.delete('/delete-account', authenticateJWT, deleteAccount);
 router.post('/change-password', authenticateJWT, changePassword);
+router.get('/check-email', checkEmail);
 
 export default router;
