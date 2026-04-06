@@ -1,7 +1,7 @@
 {
   "name": "tat-backend",
   "version": "1.0.0",
-  "description": "Backend code for talk around town",
+  "description": "Backend code for ENACT",
   "main": "index.js",
   "type": "module",
   "scripts": {

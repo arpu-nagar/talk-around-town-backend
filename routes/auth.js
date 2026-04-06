@@ -470,7 +470,7 @@ const requestPasswordReset = async (req, res) => {
         const html = `
       <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto;">
         <h1 style="color: #4A90E2; text-align: center;">Password Reset Request</h1>
-        <p style="color: #666; font-size: 16px;">You requested a password reset for your Talk Around Town account.</p>
+        <p style="color: #666; font-size: 16px;">You requested a password reset for your ENACT account.</p>
         <div style="text-align: center; margin: 30px 0;">
           <p style="color: #666; font-size: 16px;">Copy and paste this code in the app to reset your password:</p>
           <p style="color: #4A90E2; font-size: 22px; font-family: monospace; background: #f5f5f5; padding: 14px 20px; border-radius: 5px; display: inline-block; letter-spacing: 1px;">${resetToken}</p>
@@ -493,7 +493,7 @@ const requestPasswordReset = async (req, res) => {
         });
 
         await transporter.sendMail({
-            from: process.env.EMAIL_USER,
+            from: `"ENACT" <${process.env.EMAIL_USER}>`,
             to: email,
             subject: 'Password Reset Request',
             html,

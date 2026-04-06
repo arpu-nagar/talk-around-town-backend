@@ -566,7 +566,7 @@ router.post('/test-notification', authenticateJWT, async (req, res) => {
         const response = await sendNotification(
             deviceToken,
             'Test Notification',
-            'This is a test notification from Talk Around Town backend.',
+            'This is a test notification from ENACT backend.',
             { test: 'true', timestamp: Date.now().toString() },
             isIOS,
         );
