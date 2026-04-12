@@ -69,9 +69,11 @@ router.get('/users/:userId', authenticateJWT, authorizeAdmin, async (req, res) =
 });
 
 // Toggle recording status (admin only) - used by dashboard when a user signs up there
+// Body: { baniumChildId: string } — MongoDB ObjectId of the child in the Banium system
 router.patch('/users/:userId/toggle-recording', authenticateJWT, authorizeAdmin, async (req, res) => {
   try {
     const { userId } = req.params;
+    const { baniumChildId } = req.body;
 
     const [users] = await pool.query('SELECT id, name, email, recording FROM users WHERE id = ?', [userId]);
 
@@ -82,13 +84,17 @@ router.patch('/users/:userId/toggle-recording', authenticateJWT, authorizeAdmin,
     const user = users[0];
     const newRecordingStatus = !user.recording;
 
-    await pool.query('UPDATE users SET recording = ? WHERE id = ?', [newRecordingStatus, userId]);
+    await pool.query(
+      'UPDATE users SET recording = ?, banium_child_id = ? WHERE id = ?',
+      [newRecordingStatus, baniumChildId || null, userId]
+    );
 
     res.status(200).json({
       id: user.id,
       name: user.name,
       email: user.email,
       recording: newRecordingStatus,
+      banium_child_id: baniumChildId || null,
       message: `Recording ${newRecordingStatus ? 'enabled for' : 'disabled for'} user`,
     });
   } catch (error) {
