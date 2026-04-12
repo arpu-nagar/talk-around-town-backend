@@ -68,11 +68,40 @@ router.get('/users/:userId', authenticateJWT, authorizeAdmin, async (req, res) =
   }
 });
 
+// Toggle recording status (admin only) - used by dashboard when a user signs up there
+router.patch('/users/:userId/toggle-recording', authenticateJWT, authorizeAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const [users] = await pool.query('SELECT id, name, email, recording FROM users WHERE id = ?', [userId]);
+
+    if (users.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = users[0];
+    const newRecordingStatus = !user.recording;
+
+    await pool.query('UPDATE users SET recording = ? WHERE id = ?', [newRecordingStatus, userId]);
+
+    res.status(200).json({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      recording: newRecordingStatus,
+      message: `Recording ${newRecordingStatus ? 'enabled for' : 'disabled for'} user`,
+    });
+  } catch (error) {
+    console.error('Error toggling recording status:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Toggle admin status (admin only)
 router.patch('/users/:userId/toggle-admin', authenticateJWT, authorizeAdmin, async (req, res) => {
   try {
     const { userId } = req.params;
-    
+
     // Check if user exists
     const [users] = await pool.query('SELECT * FROM users WHERE id = ?', [userId]);
     
