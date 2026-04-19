@@ -218,73 +218,87 @@ router.get('/dashboard/users-timeline', authenticateJWT, authorizeAdmin, async (
   }
 });
 
-// Export all dashboard data as Excel (admin only)
+// Export filtered dashboard data as Excel (admin only)
 router.get('/export/excel', authenticateJWT, authorizeAdmin, async (req, res) => {
   try {
-    const [users] = await pool.query(`
-      SELECT id, name, email, created_at, isAdmin, number_of_children
-      FROM users ORDER BY created_at DESC
-    `);
-
-    const [children] = await pool.query(`
-      SELECT c.id, c.nickname, c.age, u.name AS parent_name, u.email AS parent_email
-      FROM children c JOIN users u ON c.user_id = u.id
-      ORDER BY u.name ASC
-    `);
-
-    const [locations] = await pool.query(`
-      SELECT l.id, l.name, l.type, u.name AS owner_name, u.email AS owner_email
-      FROM locations l JOIN users u ON l.user_id = u.id
-      ORDER BY u.name ASC
-    `);
-
-    const [notifications] = await pool.query(`
-      SELECT CONCAT(n.user_id, '-', n.loc_id, '-', n.timestamp) AS id, n.timestamp, u.name AS user_name, u.email AS user_email, l.name AS location_name
-      FROM notifications n
-      JOIN users u ON n.user_id = u.id
-      JOIN locations l ON n.loc_id = l.id
-      ORDER BY n.timestamp DESC
-      LIMIT 5000
-    `);
+    const { sheets, dateFrom, dateTo } = req.query;
+    const selectedSheets = sheets ? sheets.split(',') : ['users', 'children', 'locations', 'notifications'];
 
     const wb = XLSX.utils.book_new();
 
-    const usersWS = XLSX.utils.json_to_sheet(users.map(u => ({
-      ID: u.id,
-      Name: u.name,
-      Email: u.email,
-      'Registered On': new Date(u.created_at).toLocaleDateString(),
-      'Is Admin': u.isAdmin ? 'Yes' : 'No',
-      'Number of Children': u.number_of_children,
-    })));
-    XLSX.utils.book_append_sheet(wb, usersWS, 'Users');
+    if (selectedSheets.includes('users')) {
+      const userParams = [];
+      let userWhere = '';
+      if (dateFrom) { userWhere += ' WHERE created_at >= ?'; userParams.push(dateFrom); }
+      if (dateTo)   { userWhere += (userWhere ? ' AND' : ' WHERE') + ' created_at <= ?'; userParams.push(dateTo); }
+      const [users] = await pool.query(
+        `SELECT id, name, email, created_at, isAdmin, number_of_children FROM users${userWhere} ORDER BY created_at DESC`,
+        userParams
+      );
+      const usersWS = XLSX.utils.json_to_sheet(users.map(u => ({
+        ID: u.id,
+        Name: u.name,
+        Email: u.email,
+        'Registered On': new Date(u.created_at).toLocaleDateString(),
+        'Is Admin': u.isAdmin ? 'Yes' : 'No',
+        'Number of Children': u.number_of_children,
+      })));
+      XLSX.utils.book_append_sheet(wb, usersWS, 'Users');
+    }
 
-    const childrenWS = XLSX.utils.json_to_sheet(children.map(c => ({
-      ID: c.id,
-      Nickname: c.nickname,
-      Age: c.age,
-      'Parent Name': c.parent_name,
-      'Parent Email': c.parent_email,
-    })));
-    XLSX.utils.book_append_sheet(wb, childrenWS, 'Children');
+    if (selectedSheets.includes('children')) {
+      const [children] = await pool.query(`
+        SELECT c.id, c.nickname, c.age, u.name AS parent_name, u.email AS parent_email
+        FROM children c JOIN users u ON c.user_id = u.id ORDER BY u.name ASC
+      `);
+      const childrenWS = XLSX.utils.json_to_sheet(children.map(c => ({
+        ID: c.id,
+        Nickname: c.nickname,
+        Age: c.age,
+        'Parent Name': c.parent_name,
+        'Parent Email': c.parent_email,
+      })));
+      XLSX.utils.book_append_sheet(wb, childrenWS, 'Children');
+    }
 
-    const locationsWS = XLSX.utils.json_to_sheet(locations.map(l => ({
-      ID: l.id,
-      Name: l.name,
-      Type: l.type,
-      'Owner Name': l.owner_name,
-      'Owner Email': l.owner_email,
-    })));
-    XLSX.utils.book_append_sheet(wb, locationsWS, 'Locations');
+    if (selectedSheets.includes('locations')) {
+      const [locations] = await pool.query(`
+        SELECT l.id, l.name, l.type, u.name AS owner_name, u.email AS owner_email
+        FROM locations l JOIN users u ON l.user_id = u.id ORDER BY u.name ASC
+      `);
+      const locationsWS = XLSX.utils.json_to_sheet(locations.map(l => ({
+        ID: l.id,
+        Name: l.name,
+        Type: l.type,
+        'Owner Name': l.owner_name,
+        'Owner Email': l.owner_email,
+      })));
+      XLSX.utils.book_append_sheet(wb, locationsWS, 'Locations');
+    }
 
-    const notificationsWS = XLSX.utils.json_to_sheet(notifications.map(n => ({
-      ID: n.id,
-      Timestamp: new Date(n.timestamp).toLocaleString(),
-      'User Name': n.user_name,
-      'User Email': n.user_email,
-      Location: n.location_name,
-    })));
-    XLSX.utils.book_append_sheet(wb, notificationsWS, 'Notifications');
+    if (selectedSheets.includes('notifications')) {
+      const notifParams = [];
+      let notifWhere = '';
+      if (dateFrom) { notifWhere += ' AND n.timestamp >= ?'; notifParams.push(dateFrom); }
+      if (dateTo)   { notifWhere += ' AND n.timestamp <= ?'; notifParams.push(dateTo); }
+      const [notifications] = await pool.query(
+        `SELECT CONCAT(n.user_id, '-', n.loc_id, '-', n.timestamp) AS id, n.timestamp, u.name AS user_name, u.email AS user_email, l.name AS location_name
+         FROM notifications n
+         JOIN users u ON n.user_id = u.id
+         JOIN locations l ON n.loc_id = l.id
+         WHERE 1=1${notifWhere}
+         ORDER BY n.timestamp DESC LIMIT 5000`,
+        notifParams
+      );
+      const notificationsWS = XLSX.utils.json_to_sheet(notifications.map(n => ({
+        ID: n.id,
+        Timestamp: new Date(n.timestamp).toLocaleString(),
+        'User Name': n.user_name,
+        'User Email': n.user_email,
+        Location: n.location_name,
+      })));
+      XLSX.utils.book_append_sheet(wb, notificationsWS, 'Notifications');
+    }
 
     const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
     const filename = `enact_dashboard_${new Date().toISOString().split('T')[0]}.xlsx`;
