@@ -310,4 +310,59 @@ router.get('/export/excel', authenticateJWT, authorizeAdmin, async (req, res) =>
   }
 });
 
+// Get pending activity submissions (admin only)
+router.get('/activities/pending', authenticateJWT, authorizeAdmin, async (req, res) => {
+  try {
+    const [rows] = await pool.query(`
+      SELECT pa.id, pa.name, pa.domains, pa.status, pa.created_at,
+             u.name AS submitted_by_name, u.email AS submitted_by_email
+      FROM pending_activities pa
+      JOIN users u ON pa.submitted_by = u.id
+      WHERE pa.status = 'pending'
+      ORDER BY pa.created_at DESC
+    `);
+    res.status(200).json(rows);
+  } catch (error) {
+    console.error('Error fetching pending activities:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Approve a pending activity (admin only)
+router.patch('/activities/:id/approve', authenticateJWT, authorizeAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [result] = await pool.query(
+      'UPDATE pending_activities SET status = ?, reviewed_at = NOW(), reviewed_by = ? WHERE id = ? AND status = ?',
+      ['approved', req.user.id, id, 'pending'],
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Activity not found or already reviewed' });
+    }
+    res.status(200).json({ message: 'Activity approved' });
+  } catch (error) {
+    console.error('Error approving activity:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Reject a pending activity (admin only)
+router.patch('/activities/:id/reject', authenticateJWT, authorizeAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [result] = await pool.query(
+      'UPDATE pending_activities SET status = ?, reviewed_at = NOW(), reviewed_by = ? WHERE id = ? AND status = ?',
+      ['rejected', req.user.id, id, 'pending'],
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Activity not found or already reviewed' });
+    }
+    res.status(200).json({ message: 'Activity rejected' });
+  } catch (error) {
+    console.error('Error rejecting activity:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;
+

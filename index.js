@@ -17,6 +17,7 @@ import childrenRouter from './routes/children.js';
 import sessionRoutes from './routes/sessions.js';
 import dashboardRoutes from './routes/dashboard.js';
 import adminRoutes from './routes/adminRoutes.js';
+import activitiesRouter from './routes/activities.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 import personalizationRoutes, {
@@ -40,6 +41,7 @@ app.use('/endpoint', childrenRouter);
 app.use('/endpoint/session', sessionRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/activities', activitiesRouter);
 import authroutes from './routes/auth.js';
 import { isStrictlyInScope } from './utils/strictDomains.js';
 import pool from './config/db.js';
