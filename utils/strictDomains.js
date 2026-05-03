@@ -125,10 +125,10 @@ export const ALLOWED_DOMAINS = {
     /\b(sex|dating|relationship with partner|marriage counseling)\b/i
   ];
   
-  export function isStrictlyInScope(query) {
+  export function isStrictlyInScope(query, approvedActivities = []) {
     const q = String(query || '').toLowerCase();
 
-    // 1. Check for explicitly out-of-scope topics
+    // 1. Check for explicitly out-of-scope topics (always applies, even for whitelisted activities)
     for (const pattern of OUT_OF_SCOPE_TOPICS) {
       if (pattern.test(q)) {
         return {
@@ -136,6 +136,16 @@ export const ALLOWED_DOMAINS = {
           reason: 'out_of_scope',
           message: 'This topic is outside our 4 core domains: Language Development, Early Science Skills, Literacy Foundations, and Social-Emotional Learning.'
         };
+      }
+    }
+
+    // 2. If query contains an admin-approved custom activity, allow it through
+    if (approvedActivities.length > 0) {
+      const containsApproved = approvedActivities.some(activity =>
+        q.includes(activity.toLowerCase())
+      );
+      if (containsApproved) {
+        return { isValid: true, domain: 'custom', confidence: 10, whitelisted: true };
       }
     }
 

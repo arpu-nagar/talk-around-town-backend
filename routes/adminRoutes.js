@@ -3,6 +3,8 @@ import express from 'express';
 import pool from '../config/db.js';
 import { authenticateJWT, authorizeAdmin } from './middleware.js';
 import XLSX from 'xlsx';
+import admin from 'firebase-admin';
+import { bustApprovedActivitiesCache } from '../utils/activityCache.js';
 
 const router = express.Router();
 
@@ -332,13 +334,57 @@ router.get('/activities/pending', authenticateJWT, authorizeAdmin, async (req, r
 router.patch('/activities/:id/approve', authenticateJWT, authorizeAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const [result] = await pool.query(
-      'UPDATE pending_activities SET status = ?, reviewed_at = NOW(), reviewed_by = ? WHERE id = ? AND status = ?',
-      ['approved', req.user.id, id, 'pending'],
+
+    const [activities] = await pool.query(
+      'SELECT pa.id, pa.name, pa.submitted_by FROM pending_activities pa WHERE pa.id = ? AND pa.status = ?',
+      [id, 'pending'],
     );
-    if (result.affectedRows === 0) {
+    if (activities.length === 0) {
       return res.status(404).json({ error: 'Activity not found or already reviewed' });
     }
+
+    const activity = activities[0];
+
+    await pool.query(
+      'UPDATE pending_activities SET status = ?, reviewed_at = NOW(), reviewed_by = ? WHERE id = ?',
+      ['approved', req.user.id, id],
+    );
+    bustApprovedActivitiesCache();
+
+    // Send push notification to the user who submitted the activity
+    const [users] = await pool.query(
+      'SELECT ios_token, android_token FROM users WHERE id = ?',
+      [activity.submitted_by],
+    );
+    if (users.length > 0) {
+      const { ios_token, android_token } = users[0];
+      const token = ios_token || android_token;
+      const isIOS = !!ios_token;
+      if (token) {
+        const title = 'Activity Approved!';
+        const body = `"${activity.name}" has been approved and is now available for tip requests.`;
+        const message = isIOS
+          ? {
+              token,
+              notification: { title, body },
+              data: { type: 'activity_approved', activityName: activity.name },
+              apns: {
+                payload: { aps: { alert: { title, body }, sound: 'default', badge: 1 } },
+                headers: { 'apns-priority': '10' },
+              },
+            }
+          : {
+              token,
+              data: { type: 'activity_approved', activityName: activity.name, title, body },
+              android: { priority: 'high' },
+            };
+
+        admin.messaging().send(message).catch(err =>
+          console.error('Activity approval notification error:', err),
+        );
+      }
+    }
+
     res.status(200).json({ message: 'Activity approved' });
   } catch (error) {
     console.error('Error approving activity:', error);

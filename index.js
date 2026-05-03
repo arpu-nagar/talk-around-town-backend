@@ -56,6 +56,8 @@ app.use('/audio', express.static(path.join(__dirname, 'public', 'audio')));
 // Audio generation routes
 app.use('/api/tips/audio', audioRoutes);
 
+import { getApprovedActivities } from './utils/activityCache.js';
+
 // --- WS server wiring ---
 const server = http.createServer(app); // 👈 wrap express
 const wss = new WebSocketServer({
@@ -120,7 +122,8 @@ wss.on('connection', async (ws, req) => {
 
             // --- your scope checks (same as REST) ---
             const effectivePrompt = prompt;
-            const v = isStrictlyInScope(prompt);
+            const approvedActivities = await getApprovedActivities();
+            const v = isStrictlyInScope(prompt, approvedActivities);
             if (!v.isValid) {
                 const { status, payload } = categoryReply(v.reason ?? v.type, prompt);
                 sendJSON(ws, { type: 'out_of_scope', status, payload });
