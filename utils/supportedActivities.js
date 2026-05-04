@@ -15,6 +15,8 @@ export const SUPPORTED_ACTIVITIES = [
   // Outings
   'Car rides', 'Bus rides', 'Walks', 'Visiting family and friends',
   'Shopping', 'Getting the mail', 'Traveling to/from activity',
+  'Park', 'Playground', 'Grocery store', 'Library', 'Backyard',
+  'Playdate', 'Playtime',
   // Household chores
   'Laundry', 'Wiping up tables', 'Throwing away trash', 'Picking up toys',
   'Putting dishes in sink', 'Clean-up, set-up, transition',

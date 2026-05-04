@@ -125,22 +125,13 @@ export const ALLOWED_DOMAINS = {
     /\b(sex|dating|relationship with partner|marriage counseling)\b/i
   ];
   
+  // Matches the canonical query format the app teaches: "tips for [name] at/during/while/after [place/activity]"
+  const CANONICAL_QUERY_PATTERN = /\btips?\s+for\s+\w[\w\s]*?\s+(at|during|while|after|before|around|near|on|in)\s+\w/i;
+
   export function isStrictlyInScope(query, approvedActivities = []) {
     const q = String(query || '').toLowerCase();
 
-    // 1. If query contains a supported/approved activity, allow it through immediately.
-    //    This runs before hard-reject so that activities like "lunch", "bath time",
-    //    "nap time", and "potty time" are never blocked by the out-of-scope patterns.
-    if (approvedActivities.length > 0) {
-      const containsApproved = approvedActivities.some(activity =>
-        q.includes(activity.toLowerCase())
-      );
-      if (containsApproved) {
-        return { isValid: true, domain: 'custom', confidence: 10, whitelisted: true };
-      }
-    }
-
-    // 2. Check for explicitly out-of-scope topics
+    // 1. Hard-reject explicit out-of-scope topics first — nothing bypasses these.
     for (const pattern of OUT_OF_SCOPE_TOPICS) {
       if (pattern.test(q)) {
         return {
@@ -151,7 +142,23 @@ export const ALLOWED_DOMAINS = {
       }
     }
 
-    // 2. Must contain at least one child-related term or age pattern
+    // 2. If query matches the canonical "tips for [name] at [place]" format, allow immediately.
+    //    Hard-rejects already ran above, so this can't be abused.
+    if (CANONICAL_QUERY_PATTERN.test(query)) {
+      return { isValid: true, domain: 'custom', confidence: 10, whitelisted: true };
+    }
+
+    // 3. If query contains a supported/approved activity, allow it through immediately.
+    if (approvedActivities.length > 0) {
+      const containsApproved = approvedActivities.some(activity =>
+        q.includes(activity.toLowerCase())
+      );
+      if (containsApproved) {
+        return { isValid: true, domain: 'custom', confidence: 10, whitelisted: true };
+      }
+    }
+
+    // 4. Must contain at least one child-related term or age pattern
     const hasChildTerm = CHILD_TERMS.some(term => q.includes(term))
       || CHILD_AGE_PATTERNS.some(re => re.test(q));
     if (!hasChildTerm) {
@@ -162,7 +169,7 @@ export const ALLOWED_DOMAINS = {
       };
     }
 
-    // 3. Must clearly match at least ONE of our 4 domains (threshold raised to 3)
+    // 5. Must clearly match at least ONE of our 4 domains (threshold raised to 3)
     let matchedDomain = null;
     let maxMatches = 0;
 
