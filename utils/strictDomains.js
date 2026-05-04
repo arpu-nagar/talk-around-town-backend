@@ -128,7 +128,19 @@ export const ALLOWED_DOMAINS = {
   export function isStrictlyInScope(query, approvedActivities = []) {
     const q = String(query || '').toLowerCase();
 
-    // 1. Check for explicitly out-of-scope topics (always applies, even for whitelisted activities)
+    // 1. If query contains a supported/approved activity, allow it through immediately.
+    //    This runs before hard-reject so that activities like "lunch", "bath time",
+    //    "nap time", and "potty time" are never blocked by the out-of-scope patterns.
+    if (approvedActivities.length > 0) {
+      const containsApproved = approvedActivities.some(activity =>
+        q.includes(activity.toLowerCase())
+      );
+      if (containsApproved) {
+        return { isValid: true, domain: 'custom', confidence: 10, whitelisted: true };
+      }
+    }
+
+    // 2. Check for explicitly out-of-scope topics
     for (const pattern of OUT_OF_SCOPE_TOPICS) {
       if (pattern.test(q)) {
         return {
@@ -136,16 +148,6 @@ export const ALLOWED_DOMAINS = {
           reason: 'out_of_scope',
           message: 'This topic is outside our 4 core domains: Language Development, Early Science Skills, Literacy Foundations, and Social-Emotional Learning.'
         };
-      }
-    }
-
-    // 2. If query contains an admin-approved custom activity, allow it through
-    if (approvedActivities.length > 0) {
-      const containsApproved = approvedActivities.some(activity =>
-        q.includes(activity.toLowerCase())
-      );
-      if (containsApproved) {
-        return { isValid: true, domain: 'custom', confidence: 10, whitelisted: true };
       }
     }
 

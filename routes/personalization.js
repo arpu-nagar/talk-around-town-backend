@@ -5,6 +5,7 @@ import {
     isStrictlyInScope,
     REJECTION_MESSAGE,
 } from '../utils/strictDomains.js';
+import { getApprovedActivities } from '../utils/activityCache.js';
 import pool from '../config/db.js';
 import {
     CATEGORY_RESPONSES,
@@ -176,7 +177,8 @@ router.post('/enhanced-tips', authenticateJWT, async (req, res) => {
 
         // Strict 4-domain validation: Language Development, Early Science Skills,
         // Literacy Foundations, Social-Emotional Learning — nothing else.
-        const v = isStrictlyInScope(prompt);
+        const approvedActivities = await getApprovedActivities();
+        const v = isStrictlyInScope(prompt, approvedActivities);
         if (!v.isValid) {
             return res.status(400).json({
                 error: 'out_of_scope',
@@ -323,7 +325,8 @@ router.post('/generate-tips', authenticateJWT, async (req, res) => {
 
         // Strict 4-domain validation: Language Development, Early Science Skills,
         // Literacy Foundations, Social-Emotional Learning — nothing else.
-        const v = isStrictlyInScope(prompt);
+        const approvedActivities = await getApprovedActivities();
+        const v = isStrictlyInScope(prompt, approvedActivities);
         if (!v.isValid) {
             return res.status(400).json({
                 error: 'out_of_scope',
@@ -681,7 +684,8 @@ router.post('/enhanced-tips-survey', authenticateJWT, async (req, res) => {
 
         // Strict 4-domain validation: Language Development, Early Science Skills,
         // Literacy Foundations, Social-Emotional Learning — nothing else.
-        const v = isStrictlyInScope(prompt);
+        const approvedActivities = await getApprovedActivities();
+        const v = isStrictlyInScope(prompt, approvedActivities);
         if (!v.isValid) {
             return res.status(400).json({
                 error: 'out_of_scope',
