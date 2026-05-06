@@ -133,10 +133,13 @@ export const ALLOWED_DOMAINS = {
 
     // 1. Approved activities whitelist runs FIRST — explicitly approved activities always pass,
     //    even if they contain words that would otherwise trigger hard-rejects (e.g. "meal time", "bath time").
+    //    Normalize spaces so "mealtime" matches "meal time" and vice versa.
     if (approvedActivities.length > 0) {
-      const containsApproved = approvedActivities.some(activity =>
-        q.includes(activity.toLowerCase())
-      );
+      const qNorm = q.replace(/[\s\-]+/g, '');
+      const containsApproved = approvedActivities.some(activity => {
+        const a = activity.toLowerCase();
+        return q.includes(a) || qNorm.includes(a.replace(/[\s\-]+/g, ''));
+      });
       if (containsApproved) {
         return { isValid: true, domain: 'custom', confidence: 10, whitelisted: true };
       }
