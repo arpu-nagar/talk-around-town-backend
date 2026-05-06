@@ -131,7 +131,18 @@ export const ALLOWED_DOMAINS = {
   export function isStrictlyInScope(query, approvedActivities = []) {
     const q = String(query || '').toLowerCase();
 
-    // 1. Hard-reject explicit out-of-scope topics first — nothing bypasses these.
+    // 1. Approved activities whitelist runs FIRST — explicitly approved activities always pass,
+    //    even if they contain words that would otherwise trigger hard-rejects (e.g. "meal time", "bath time").
+    if (approvedActivities.length > 0) {
+      const containsApproved = approvedActivities.some(activity =>
+        q.includes(activity.toLowerCase())
+      );
+      if (containsApproved) {
+        return { isValid: true, domain: 'custom', confidence: 10, whitelisted: true };
+      }
+    }
+
+    // 2. Hard-reject explicit out-of-scope topics.
     for (const pattern of OUT_OF_SCOPE_TOPICS) {
       if (pattern.test(q)) {
         return {
@@ -142,20 +153,10 @@ export const ALLOWED_DOMAINS = {
       }
     }
 
-    // 2. If query matches the canonical "tips for [name] at [place]" format, allow immediately.
-    //    Hard-rejects already ran above, so this can't be abused.
+    // 3. Canonical "tips for [name] at [place]" format — allow immediately.
+    //    Hard-rejects already ran above so "tips for disciplining my kid at the park" is blocked at step 2.
     if (CANONICAL_QUERY_PATTERN.test(query)) {
       return { isValid: true, domain: 'custom', confidence: 10, whitelisted: true };
-    }
-
-    // 3. If query contains a supported/approved activity, allow it through immediately.
-    if (approvedActivities.length > 0) {
-      const containsApproved = approvedActivities.some(activity =>
-        q.includes(activity.toLowerCase())
-      );
-      if (containsApproved) {
-        return { isValid: true, domain: 'custom', confidence: 10, whitelisted: true };
-      }
     }
 
     // 4. Must contain at least one child-related term or age pattern
