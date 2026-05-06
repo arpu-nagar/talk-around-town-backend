@@ -11,7 +11,7 @@ export const SUPPORTED_ACTIVITIES = [
   // Outdoor play
   'Ride-ons', 'Playing ball', 'Swinging', 'Sliding', 'Water play',
   // Eating & drinking
-  'Bottle time', 'Breakfast', 'Lunch', 'Dinner', 'Snacks', 'Water breaks',
+  'Bottle time', 'Breakfast', 'Lunch', 'Dinner', 'Snacks', 'Water breaks', 'Meal time', 'Mealtime',
   // Outings
   'Car rides', 'Bus rides', 'Walks', 'Visiting family and friends',
   'Shopping', 'Getting the mail', 'Traveling to/from activity',
