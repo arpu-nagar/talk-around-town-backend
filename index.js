@@ -78,6 +78,7 @@ wss.on('connection', async (ws, req) => {
         if (!query?.token) throw new Error('Missing token');
         req.user = jwt.verify(query.token, process.env.JWT_SECRET);
     } catch (e) {
+        console.log(`[WS] Auth failed: ${e.message} — closing 1008`);
         sendJSON(ws, { type: 'error', message: 'Unauthorized' });
         return ws.close(1008, 'Unauthorized');
     }
