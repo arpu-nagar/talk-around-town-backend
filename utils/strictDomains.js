@@ -78,51 +78,54 @@ export const ALLOWED_DOMAINS = {
     }
   };
   
-  // Topics explicitly OUT of scope (reject immediately)
-  const OUT_OF_SCOPE_TOPICS = [
-    // Behavioral/discipline (not in our domains)
-    /\b(discipline|punishment|consequence|timeout|reward|chart|behavior modification)\b/i,
+  // Absolute rejects — always block, even if an approved activity name appears in the query.
+  const ABSOLUTE_REJECTS = [
+    // Behavioral/discipline
+    /\b(discipline|punishment|consequence|timeout|reward chart|behavior modification)\b/i,
     /\b(tantrum|meltdown|defiance|backtalk|hitting|biting|kicking)\b/i,
-    
-    // Sleep (not in our domains)
-    /\b(sleep|bedtime|nap|nighttime|wake|insomnia)\b/i,
-    
-    // Eating/nutrition (not in our domains)
-    /\b(eating|food|meal|nutrition|picky eater|snack|diet|feeding)\b/i,
-    
-    // Potty training (not in our domains)
-    /\b(potty|toilet|diaper|bathroom|pee|poop|training)\b/i,
-    
-    // Screen time (not in our domains)
-    /\b(screen time|tablet|ipad|tv|television|video game|youtube)\b/i,
-    
-    // Homework/school admin (not in our domains)
-    /\b(homework|grade|test|quiz|school meeting|teacher conference)\b/i,
-    
-    // Travel/logistics (not in our domains)
-    /\b(travel|vacation|flight|hotel|car seat|stroller)\b/i,
-    
-    // Drugs / substances (never allowed)
+
+    // Drugs / substances
     /\b(cocaine|heroin|meth(amphetamine)?|fentanyl|mdma|lsd|ecstasy|weed|marijuana|cannabis|opioid|crack|xanax|adderall|drug|narcotics?|overdose|vape|vaping)\b/i,
 
-  // Violence / weapons (never allowed)
+    // Violence / weapons
     /\b(beat|hit|harm|hurt|kill|murder|shoot|stab|gun|weapon|bomb|assault|abuse|trafficking|punish|spank|slap|smack|choke|strangle)\b/i,
 
-  // Adult / sexual (never allowed)
+    // Adult / sexual
     /\b(porn|sex(?:ual)?|nude|naked|onlyfans|fetish|masturbat)\b/i,
 
-  // Self-harm (never allowed)
+    // Self-harm
     /\b(suicide|self[-\s]?harm|kill myself|end my life)\b/i,
 
-  // Medical/health (never allowed - legal risk)
+    // Medical/health (legal risk)
     /\b(diagnos|symptom|treatment|medicine|medication|doctor|illness|disease|injury|medical)\b/i,
     /\b(fever|rash|cough|cold|flu|allergy|asthma|adhd|autism|delay)\b/i,
-    
-    // Financial/legal (never allowed)
+
+    // Financial/legal
     /\b(custody|divorce|lawyer|legal|court|financial|money|budget|cost)\b/i,
-    
+
     // Adult topics
-    /\b(sex|dating|relationship with partner|marriage counseling)\b/i
+    /\b(sex|dating|relationship with partner|marriage counseling)\b/i,
+  ];
+
+  // Soft rejects — block off-topic queries but can be overridden by an approved activity name.
+  const SOFT_REJECTS = [
+    // Sleep (not in our domains)
+    /\b(sleep|bedtime|nap|nighttime|wake|insomnia)\b/i,
+
+    // Eating/nutrition (activities like "snack time" / "meal time" can unlock these)
+    /\b(eating|food|meal|nutrition|picky eater|snack|diet|feeding)\b/i,
+
+    // Potty training
+    /\b(potty|toilet|diaper|bathroom|pee|poop|training)\b/i,
+
+    // Screen time
+    /\b(screen time|tablet|ipad|tv|television|video game|youtube)\b/i,
+
+    // Homework/school admin
+    /\b(homework|grade|test|quiz|school meeting|teacher conference)\b/i,
+
+    // Travel/logistics
+    /\b(travel|vacation|flight|hotel|car seat|stroller)\b/i,
   ];
   
   // Matches the canonical query format the app teaches: "tips for [name] at/during/while/after [place/activity]"
@@ -131,8 +134,20 @@ export const ALLOWED_DOMAINS = {
   export function isStrictlyInScope(query, approvedActivities = []) {
     const q = String(query || '').toLowerCase();
 
-    // 1. Approved activities whitelist runs FIRST — explicitly approved activities always pass,
-    //    even if they contain words that would otherwise trigger hard-rejects (e.g. "meal time", "bath time").
+    // 1. Absolute rejects — always block regardless of approved activities.
+    //    Prevents "discipline tips at snack time" from sneaking through via the whitelist.
+    for (const pattern of ABSOLUTE_REJECTS) {
+      if (pattern.test(q)) {
+        return {
+          isValid: false,
+          reason: 'out_of_scope',
+          message: 'This topic is outside our 4 core domains: Language Development, Early Science Skills, Literacy Foundations, and Social-Emotional Learning.'
+        };
+      }
+    }
+
+    // 2. Approved activities whitelist — if the query mentions an approved activity name,
+    //    skip the soft rejects and pass through.
     //    Normalize spaces so "mealtime" matches "meal time" and vice versa.
     if (approvedActivities.length > 0) {
       const qNorm = q.replace(/[\s\-]+/g, '');
@@ -145,8 +160,8 @@ export const ALLOWED_DOMAINS = {
       }
     }
 
-    // 2. Hard-reject explicit out-of-scope topics.
-    for (const pattern of OUT_OF_SCOPE_TOPICS) {
+    // 3. Soft rejects — block off-topic queries that weren't unlocked by the whitelist.
+    for (const pattern of SOFT_REJECTS) {
       if (pattern.test(q)) {
         return {
           isValid: false,
@@ -156,13 +171,13 @@ export const ALLOWED_DOMAINS = {
       }
     }
 
-    // 3. Canonical "tips for [name] at [place]" format — allow immediately.
-    //    Hard-rejects already ran above so "tips for disciplining my kid at the park" is blocked at step 2.
+    // 4. Canonical "tips for [name] at [place]" format — allow immediately.
+    //    Absolute rejects already ran above so "tips for disciplining my kid at the park" is blocked at step 1.
     if (CANONICAL_QUERY_PATTERN.test(query)) {
       return { isValid: true, domain: 'custom', confidence: 10, whitelisted: true };
     }
 
-    // 4. Must contain at least one child-related term or age pattern
+    // 5. Must contain at least one child-related term or age pattern
     const hasChildTerm = CHILD_TERMS.some(term => q.includes(term))
       || CHILD_AGE_PATTERNS.some(re => re.test(q));
     if (!hasChildTerm) {
@@ -173,7 +188,7 @@ export const ALLOWED_DOMAINS = {
       };
     }
 
-    // 5. Must clearly match at least ONE of our 4 domains (threshold raised to 3)
+    // 6. Must clearly match at least ONE of our 4 domains (threshold raised to 3)
     let matchedDomain = null;
     let maxMatches = 0;
 

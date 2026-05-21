@@ -3,6 +3,7 @@ import { OpenAI } from 'openai';
 import pool from '../config/db.js';
 import { authenticateJWT } from './middleware.js';
 import { SUPPORTED_ACTIVITIES } from '../utils/supportedActivities.js';
+import { getApprovedActivities } from '../utils/activityCache.js';
 
 const router = express.Router();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -20,8 +21,13 @@ pool.query(`
   )
 `).catch(err => console.error('pending_activities table init error:', err));
 
-router.get('/supported', (req, res) => {
-  res.json({ activities: SUPPORTED_ACTIVITIES });
+router.get('/supported', async (req, res) => {
+  try {
+    const activities = await getApprovedActivities();
+    res.json({ activities });
+  } catch {
+    res.json({ activities: SUPPORTED_ACTIVITIES });
+  }
 });
 
 router.post('/suggest', authenticateJWT, async (req, res) => {
