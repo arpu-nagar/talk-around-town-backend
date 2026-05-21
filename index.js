@@ -137,16 +137,20 @@ wss.on('connection', async (ws, req) => {
                 [userId],
             );
 
-            let enhancedContentPrefs = [...contentPreferences];
+            let enhancedContentPrefs = Array.isArray(contentPreferences)
+                ? [...contentPreferences]
+                : [];
             let surveyContext = '';
             let hasSurveyData = false;
             if (surveyRows.length) {
                 const survey = surveyRows[0];
                 const userPrefs =
                     safeJSONParse(survey.content_preferences) ?? [];
-                enhancedContentPrefs = [
-                    ...new Set([...enhancedContentPrefs, ...userPrefs]),
-                ];
+                // The in-app selected content preferences are the active filter.
+                // Survey preferences only fill in when the app sends no active filter.
+                if (!enhancedContentPrefs.length) {
+                    enhancedContentPrefs = userPrefs;
+                }
                 hasSurveyData = true;
                 surveyContext = buildSurveyContext(survey);
             }

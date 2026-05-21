@@ -11,6 +11,19 @@ const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 });
 
+const SELECTABLE_DOMAINS = [
+    'Language Development',
+    'Early Science Skills',
+    'Literacy Foundations',
+    'Social-Emotional Learning',
+];
+
+function normalizeContentDomains(contentPreferences = []) {
+    if (!Array.isArray(contentPreferences)) return [];
+    const allowed = new Set(SELECTABLE_DOMAINS);
+    return [...new Set(contentPreferences.filter(domain => allowed.has(domain)))];
+}
+
 /**
  * Hard limits & weights to keep tips strictly on-topic.
  */
@@ -307,7 +320,9 @@ class PersonalizationService {
             // Get tip embeddings from MySQL (excluding already interacted)
             const excludeIds = (interacted || []).map(r => r.tip_id).filter(Boolean);
 
-            const domainPlaceholders = `'Language Development','Early Science Skills','Literacy Foundations','Social-Emotional Learning'`;
+            const selectedDomains = normalizeContentDomains(contentPreferences);
+            const domainFilter = selectedDomains.length ? selectedDomains : SELECTABLE_DOMAINS;
+            const domainPlaceholders = domainFilter.map(() => '?').join(',');
             const [tipEmbeddings] = await pool.query(
                 `SELECT te.tip_id, te.embedding, t.title, t.description, t.type
                  FROM tip_embeddings te
@@ -315,7 +330,7 @@ class PersonalizationService {
                  WHERE t.type IN (${domainPlaceholders})
                  ${excludeIds.length ? `AND t.id NOT IN (${excludeIds.map(() => '?').join(',')})` : ''}
                  LIMIT ?`,
-                [...excludeIds, Math.max(limit * 5, 50)]
+                [...domainFilter, ...excludeIds, Math.max(limit * 5, 50)]
             );
 
             if (tipEmbeddings.length === 0) {
@@ -384,12 +399,7 @@ class PersonalizationService {
             }
 
             // Domain post-filter: only return tips from the 4 allowed domains
-            const ALLOWED_DOMAINS_SET = new Set([
-                'Language Development',
-                'Early Science Skills',
-                'Literacy Foundations',
-                'Social-Emotional Learning',
-            ]);
+            const ALLOWED_DOMAINS_SET = new Set(domainFilter);
             const domainFiltered = recommendations.filter(r => {
                 const cat = Array.isArray(r.categories) ? r.categories[0] : '';
                 return ALLOWED_DOMAINS_SET.has(cat);
@@ -791,21 +801,9 @@ class PersonalizationService {
                                     {"id":1,"title":"≤50 chars","body":"2 short sentences.","details":"1 short sentence.","categories":["one_of_the_4_domains"]}
                                 ]`;
 
-                if (
-                    Array.isArray(contentPreferences) &&
-                    contentPreferences.length
-                ) {
-                    const allowed = contentPreferences.filter(p =>
-                        [
-                            'Language Development',
-                            'Early Science Skills',
-                            'Literacy Foundations',
-                            'Social-Emotional Learning',
-                        ].includes(p),
-                    );
-                    if (allowed.length) {
-                        userMsg += `\n\nUser-selected domains: ${allowed.join(', ')}. Prioritize these.`;
-                    }
+                const selectedDomains = normalizeContentDomains(contentPreferences);
+                if (selectedDomains.length) {
+                    userMsg += `\n\nUser-selected domains: ${selectedDomains.join(', ')}. Generate tips ONLY in these selected domains. Every tip category must be one of these selected domains.`;
                 }
 
                 if (preferenceContext) {
@@ -924,12 +922,7 @@ ABSOLUTE RULES — NO EXCEPTIONS:
                     };
                 });
 
-                const ALLOWED_DOMAINS = new Set([
-                    'Language Development',
-                    'Early Science Skills',
-                    'Literacy Foundations',
-                    'Social-Emotional Learning',
-                ]);
+                const ALLOWED_DOMAINS = new Set(selectedDomains.length ? selectedDomains : SELECTABLE_DOMAINS);
 
                 // Post-generation domain filter: discard any tip not tagged to an allowed domain
                 const domainFilteredTips = formattedTips.filter(t => {
@@ -1718,33 +1711,26 @@ ABSOLUTE RULES — NO EXCEPTIONS:
         onTip, // async (tip) => void
         onPhase, // (phaseStr) => void
     }) {
-        const allowedDomains = [
-            'Language Development',
-            'Early Science Skills',
-            'Literacy Foundations',
-            'Social-Emotional Learning',
-        ];
+        const allowedDomains = SELECTABLE_DOMAINS;
+        const selectedDomains = normalizeContentDomains(contentPreferences);
+        const outputDomains = selectedDomains.length ? selectedDomains : allowedDomains;
         const keywords = extractQueryKeywords(query);
         const pinLine = keywords.length
             ? `Prefer including: ${keywords.map(k => `"${k}"`).join(', ')}`
             : '';
 
         let userMsg = `Output parenting tips about: "${query}" as NDJSON (one JSON object per line). Each line must be:
-      {"title":"≤50 chars","body":"2 short sentences","details":"1 short sentence","categories":["one_of:${allowedDomains.join('|')}"]}
+      {"title":"≤50 chars","body":"2 short sentences","details":"1 short sentence","categories":["one_of:${outputDomains.join('|')}"]}
       
       Rules:
-      - STRICTLY within: ${allowedDomains.join(', ')}.
+      - STRICTLY within selected domains: ${outputDomains.join(', ')}.
       - No medical, sleep, eating, potty, discipline, legal, logistics, or screen-time advice.
       - Age-appropriate, specific, concise.
       - No markdown, no arrays, no extra text — ONLY JSON objects, one per line.
       ${pinLine}`;
 
-        if (Array.isArray(contentPreferences) && contentPreferences.length) {
-            const allowed = contentPreferences.filter(d =>
-                allowedDomains.includes(d),
-            );
-            if (allowed.length)
-                userMsg += `\nPrioritize domains: ${allowed.join(', ')}.`;
+        if (selectedDomains.length) {
+            userMsg += `\nSelected domains are a HARD constraint: generate tips ONLY for ${selectedDomains.join(', ')}. Do not output any other category.`;
         }
 
         onPhase?.('openai:starting');
@@ -1791,6 +1777,13 @@ ABSOLUTE RULES — NO EXCEPTIONS:
                     continue;
                 } // wait for clean lines
 
+                const categories =
+                    Array.isArray(obj.categories) && obj.categories.length
+                        ? obj.categories.slice(0, 1)
+                        : [];
+                const category = categories[0];
+                if (!outputDomains.includes(category)) continue;
+
                 const formatted = {
                     id: `generated_${Date.now()}_${counter++}`,
                     title: this.sanitize(obj.title || ''),
@@ -1807,10 +1800,7 @@ ABSOLUTE RULES — NO EXCEPTIONS:
                             .join(' '),
                     ),
                     audioUrl: null,
-                    categories:
-                        Array.isArray(obj.categories) && obj.categories.length
-                            ? obj.categories.slice(0, 1)
-                            : ['generated'],
+                    categories: [category],
                     isGenerated: true,
                 };
 
