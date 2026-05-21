@@ -24,6 +24,28 @@ function normalizeContentDomains(contentPreferences = []) {
     return [...new Set(contentPreferences.filter(domain => allowed.has(domain)))];
 }
 
+function normalizeGeneratedDomain(category) {
+    if (!category) return null;
+    const normalized = String(category).trim().toLowerCase();
+    const aliases = new Map([
+        ['language', 'Language Development'],
+        ['language skills', 'Language Development'],
+        ['language development', 'Language Development'],
+        ['science', 'Early Science Skills'],
+        ['science skills', 'Early Science Skills'],
+        ['early science skills', 'Early Science Skills'],
+        ['literacy', 'Literacy Foundations'],
+        ['literacy skills', 'Literacy Foundations'],
+        ['literacy foundations', 'Literacy Foundations'],
+        ['social emotional', 'Social-Emotional Learning'],
+        ['social-emotional', 'Social-Emotional Learning'],
+        ['social-emotional skills', 'Social-Emotional Learning'],
+        ['social-emotional learning', 'Social-Emotional Learning'],
+        ['social emotional learning', 'Social-Emotional Learning'],
+    ]);
+    return aliases.get(normalized) || category;
+}
+
 /**
  * Hard limits & weights to keep tips strictly on-topic.
  */
@@ -1719,7 +1741,7 @@ ABSOLUTE RULES — NO EXCEPTIONS:
             ? `Prefer including: ${keywords.map(k => `"${k}"`).join(', ')}`
             : '';
 
-        let userMsg = `Output parenting tips about: "${query}" as NDJSON (one JSON object per line). Each line must be:
+        let userMsg = `Output exactly 3 parenting tips about: "${query}" as NDJSON (one JSON object per line). Each line must be:
       {"title":"≤50 chars","body":"2 short sentences","details":"1 short sentence","categories":["one_of:${outputDomains.join('|')}"]}
       
       Rules:
@@ -1772,7 +1794,7 @@ ABSOLUTE RULES — NO EXCEPTIONS:
                 Array.isArray(obj.categories) && obj.categories.length
                     ? obj.categories.slice(0, 1)
                     : [];
-            const category = categories[0];
+            const category = normalizeGeneratedDomain(categories[0]);
             if (!outputDomains.includes(category)) return;
 
             const formatted = {
@@ -1820,30 +1842,63 @@ ABSOLUTE RULES — NO EXCEPTIONS:
         onPhase?.('openai:ended');
     }
 
-    async scoreSingleGeneratedTip({ userId, query, tip }) {
-        try {
-            // fetch personalization signals
-            const [[userProfile], [dislikes]] = await Promise.all([
-                pool.query(
-                    'SELECT preference_embedding FROM user_preference_profiles WHERE user_id = ?',
-                    [userId],
-                ),
-                pool.query(
-                    `SELECT te.embedding
+    async buildGeneratedTipScoringContext(userId, query) {
+        const [[userProfile], [dislikes], queryEmbedding] = await Promise.all([
+            pool.query(
+                'SELECT preference_embedding FROM user_preference_profiles WHERE user_id = ?',
+                [userId],
+            ),
+            pool.query(
+                `SELECT te.embedding
                FROM user_tip_interactions uti
                JOIN tip_embeddings te ON uti.tip_id = te.tip_id
                WHERE uti.user_id = ? AND uti.interaction_type = 'dislike'`,
-                    [userId],
-                ),
-            ]);
-
-            const queryEmbedding = await openai.embeddings
+                [userId],
+            ),
+            openai.embeddings
                 .create({
                     model: 'text-embedding-3-small',
                     input: [query],
                     encoding_format: 'float',
                 })
-                .then(r => r.data[0].embedding);
+                .then(r => r.data[0].embedding),
+        ]);
+
+        let userPreference = null;
+        let hasPersonalization = false;
+        if (userProfile.length && userProfile[0].preference_embedding) {
+            userPreference = Array.isArray(userProfile[0].preference_embedding)
+                ? userProfile[0].preference_embedding
+                : JSON.parse(userProfile[0].preference_embedding);
+            hasPersonalization = true;
+        }
+
+        let dislikeCentroid = null;
+        if (dislikes.length) {
+            const vecs = dislikes.map(r =>
+                Array.isArray(r.embedding) ? r.embedding : JSON.parse(r.embedding),
+            );
+            const L = vecs[0].length;
+            dislikeCentroid = new Array(L).fill(0);
+            for (const v of vecs)
+                for (let i = 0; i < L; i++) dislikeCentroid[i] += v[i];
+            for (let i = 0; i < L; i++) dislikeCentroid[i] /= vecs.length;
+        }
+
+        return {
+            queryEmbedding,
+            userPreference,
+            hasPersonalization,
+            dislikeCentroid,
+            pins: extractQueryKeywords(query),
+        };
+    }
+
+    async scoreSingleGeneratedTip({ userId, query, tip, context, strict = true }) {
+        try {
+            const scoringContext =
+                (context && await context) ||
+                (await this.buildGeneratedTipScoringContext(userId, query));
 
             const tipEmbedding = await openai.embeddings
                 .create({
@@ -1852,32 +1907,6 @@ ABSOLUTE RULES — NO EXCEPTIONS:
                     encoding_format: 'float',
                 })
                 .then(r => r.data[0].embedding);
-
-            let userPreference = null;
-            let hasPersonalization = false;
-            if (userProfile.length && userProfile[0].preference_embedding) {
-                userPreference = Array.isArray(
-                    userProfile[0].preference_embedding,
-                )
-                    ? userProfile[0].preference_embedding
-                    : JSON.parse(userProfile[0].preference_embedding);
-                hasPersonalization = true;
-            }
-
-            // dislike centroid
-            let dislikeCentroid = null;
-            if (dislikes.length) {
-                const vecs = dislikes.map(r =>
-                    Array.isArray(r.embedding)
-                        ? r.embedding
-                        : JSON.parse(r.embedding),
-                );
-                const L = vecs[0].length;
-                dislikeCentroid = new Array(L).fill(0);
-                for (const v of vecs)
-                    for (let i = 0; i < L; i++) dislikeCentroid[i] += v[i];
-                for (let i = 0; i < L; i++) dislikeCentroid[i] /= vecs.length;
-            }
 
             // gates & scores
             const cosine = (a, b) => {
@@ -1892,23 +1921,23 @@ ABSOLUTE RULES — NO EXCEPTIONS:
                 return num / (Math.sqrt(da) * Math.sqrt(db));
             };
 
-            const qSim = cosine(queryEmbedding, tipEmbedding);
-            if (qSim < ON_TOPIC.MIN_QUERY_SIM) return null;
+            const qSim = cosine(scoringContext.queryEmbedding, tipEmbedding);
+            if (strict && qSim < ON_TOPIC.MIN_QUERY_SIM) return null;
 
             const blob =
                 `${tip.title} ${tip.body} ${tip.details}`.toLowerCase();
-            const pins = extractQueryKeywords(query);
-            if (pins.length && !pins.some(k => blob.includes(k))) return null;
+            const pins = scoringContext.pins || extractQueryKeywords(query);
+            if (strict && pins.length && !pins.some(k => blob.includes(k))) return null;
 
             let personal = 0.5;
-            if (hasPersonalization && userPreference)
-                personal = cosine(userPreference, tipEmbedding);
+            if (scoringContext.hasPersonalization && scoringContext.userPreference)
+                personal = cosine(scoringContext.userPreference, tipEmbedding);
 
             let final =
                 ON_TOPIC.LAMBDA_QUERY * qSim +
                 ON_TOPIC.LAMBDA_PERSONAL * personal;
-            if (dislikeCentroid) {
-                const dSim = cosine(dislikeCentroid, tipEmbedding);
+            if (scoringContext.dislikeCentroid) {
+                const dSim = cosine(scoringContext.dislikeCentroid, tipEmbedding);
                 final -= ON_TOPIC.LAMBDA_DISLIKE * Math.max(0, dSim);
             }
 
@@ -1917,6 +1946,9 @@ ABSOLUTE RULES — NO EXCEPTIONS:
                 personal_match: Math.round(personal * 1000) / 1000,
                 similarity_score: Math.round(final * 1000) / 1000,
                 query_relevance: Math.round(qSim * 1000) / 1000,
+                recommendationReason: scoringContext.hasPersonalization
+                    ? 'Personalized using your liked and disliked tips.'
+                    : 'Personalized for your request and selected content preferences.',
             };
         } catch (e) {
             console.error('scoreSingleGeneratedTip error:', e.message);

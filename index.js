@@ -165,6 +165,11 @@ wss.on('connection', async (ws, req) => {
             // --- stream AI tips first ---
             let emitted = 0;
             if (generateMode === 'generate' || generateMode === 'hybrid') {
+                const scoringContextPromise =
+                    personalizationService.buildGeneratedTipScoringContext(
+                        userId,
+                        effectivePrompt,
+                    );
                 await personalizationService.generateTipsStreamNDJSON({
                     ws,
                     abortedRef: () => aborted,
@@ -183,29 +188,30 @@ wss.on('connection', async (ws, req) => {
                                     userId,
                                     query: effectivePrompt,
                                     tip,
+                                    context: scoringContextPromise,
+                                    strict: false,
                                 },
                             );
-                        if (!scored) return;
                         emitted += 1;
                         sendJSON(ws, {
                             type: 'tip',
                             source: 'ai',
-                            data: scored,
+                            data: scored || tip,
                         });
                     },
                 });
             }
 
-            // --- DB fallback if AI produced nothing ---
+            // --- DB fallback/top-up if AI produced fewer than 3 tips ---
             if (
-                emitted === 0 &&
+                emitted < 3 &&
                 (generateMode === 'database' || generateMode === 'hybrid')
             ) {
                 const dbResult =
                     await personalizationService.getContextualPersonalizedTips(
                         userId,
                         effectivePrompt,
-                        3,
+                        3 - emitted,
                         enhancedContentPrefs,
                     );
                 if (dbResult?.tips?.length) {
