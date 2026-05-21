@@ -1757,6 +1757,47 @@ ABSOLUTE RULES — NO EXCEPTIONS:
         let idx = -1;
         let counter = 0;
 
+        const emitLine = async rawLine => {
+            const line = this.cleanOneLineJSON(rawLine);
+            if (!line) return;
+
+            let obj;
+            try {
+                obj = JSON.parse(line);
+            } catch {
+                return;
+            }
+
+            const categories =
+                Array.isArray(obj.categories) && obj.categories.length
+                    ? obj.categories.slice(0, 1)
+                    : [];
+            const category = categories[0];
+            if (!outputDomains.includes(category)) return;
+
+            const formatted = {
+                id: `generated_${Date.now()}_${counter++}`,
+                title: this.sanitize(obj.title || ''),
+                body: this.sanitize(
+                    String(obj.body || '')
+                        .split(/(?<=[.!?])\s+/)
+                        .slice(0, 2)
+                        .join(' '),
+                ),
+                details: this.sanitize(
+                    String(obj.details || '')
+                        .split(/(?<=[.!?])\s+/)
+                        .slice(0, 1)
+                        .join(' '),
+                ),
+                audioUrl: null,
+                categories: [category],
+                isGenerated: true,
+            };
+
+            await onTip?.(formatted);
+        };
+
         for await (const part of stream) {
             if (abortedRef()) break;
             const delta = part?.choices?.[0]?.delta?.content ?? '';
@@ -1766,46 +1807,14 @@ ABSOLUTE RULES — NO EXCEPTIONS:
 
             // process complete lines
             while ((idx = buf.indexOf('\n')) !== -1) {
-                const line = this.cleanOneLineJSON(buf.slice(0, idx));
+                const rawLine = buf.slice(0, idx);
                 buf = buf.slice(idx + 1);
-                if (!line) continue;
-
-                let obj;
-                try {
-                    obj = JSON.parse(line);
-                } catch {
-                    continue;
-                } // wait for clean lines
-
-                const categories =
-                    Array.isArray(obj.categories) && obj.categories.length
-                        ? obj.categories.slice(0, 1)
-                        : [];
-                const category = categories[0];
-                if (!outputDomains.includes(category)) continue;
-
-                const formatted = {
-                    id: `generated_${Date.now()}_${counter++}`,
-                    title: this.sanitize(obj.title || ''),
-                    body: this.sanitize(
-                        String(obj.body || '')
-                            .split(/(?<=[.!?])\s+/)
-                            .slice(0, 2)
-                            .join(' '),
-                    ),
-                    details: this.sanitize(
-                        String(obj.details || '')
-                            .split(/(?<=[.!?])\s+/)
-                            .slice(0, 1)
-                            .join(' '),
-                    ),
-                    audioUrl: null,
-                    categories: [category],
-                    isGenerated: true,
-                };
-
-                await onTip?.(formatted);
+                await emitLine(rawLine);
             }
+        }
+
+        if (buf.trim()) {
+            await emitLine(buf);
         }
 
         onPhase?.('openai:ended');
