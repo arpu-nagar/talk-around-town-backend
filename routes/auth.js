@@ -80,10 +80,10 @@ const register = async (req, res) => {
         ) {
             // Validate age values (must be integer 1-5)
             for (const child of childrenDetails) {
-                if (!Number.isInteger(child.age) || child.age < 1 || child.age > 5) {
+                if (!Number.isInteger(child.age) || child.age < 0 || child.age > 5) {
                     await connection.rollback();
                     return res.status(400).json({
-                        error: 'Child age must be an integer between 1 and 5'
+                        error: 'Child age must be an integer between 0 and 5'
                     });
                 }
             }

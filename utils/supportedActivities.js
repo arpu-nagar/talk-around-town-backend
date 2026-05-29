@@ -23,9 +23,4 @@ export const SUPPORTED_ACTIVITIES = [
   // Books & literacy
   'Reading together', 'Playing with cloth or board books',
   'Talking about pictures', 'Reading or looking at books',
-  // Structured activities
-  'Circle time', 'Music time', 'Library story time', 'Story time', 'Art',
-  'Playdough', 'Coloring', 'Centers', 'Large group', 'Small group',
-  'Individual activity', 'Other', 'School work', 'Faith-based activities',
-  'Therapy',
 ];
