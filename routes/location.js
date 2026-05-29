@@ -291,7 +291,7 @@ router.post('/', authenticateJWT, async (req, res) => {
 
     try {
         let user_id = req.user.id;
-        const { latitude, longitude } = req.body;
+        const { latitude, longitude, contentPreferences: clientPrefs } = req.body;
 
         if (!latitude || !longitude) {
             return res
@@ -392,18 +392,26 @@ const [notifs] = await pool.query(
             });
         }
 
-        // Get user's content preferences from survey
-        let contentPreferences = [];
-        try {
-            const [surveyRows] = await pool.query(
-                'SELECT content_preferences FROM user_survey_responses WHERE user_id = ? ORDER BY created_at DESC LIMIT 1',
-                [user_id]
-            );
-            if (surveyRows.length > 0 && surveyRows[0].content_preferences) {
-                contentPreferences = JSON.parse(surveyRows[0].content_preferences);
+        // Prefer content preferences sent by the client (from AsyncStorage).
+        // Fall back to survey DB preferences if the client sent none.
+        let contentPreferences = Array.isArray(clientPrefs) && clientPrefs.length
+            ? clientPrefs
+            : [];
+        if (!contentPreferences.length) {
+            try {
+                const [surveyRows] = await pool.query(
+                    'SELECT content_preferences FROM user_survey_responses WHERE user_id = ? ORDER BY created_at DESC LIMIT 1',
+                    [user_id]
+                );
+                if (surveyRows.length > 0 && surveyRows[0].content_preferences) {
+                    const parsed = JSON.parse(surveyRows[0].content_preferences);
+                    if (Array.isArray(parsed) && parsed.length) {
+                        contentPreferences = parsed;
+                    }
+                }
+            } catch (e) {
+                console.log('Could not fetch user preferences, using defaults:', e.message);
             }
-        } catch (e) {
-            console.log('Could not fetch user preferences, using defaults:', e.message);
         }
 
         // Fetch user's children for child context in prompt
@@ -424,10 +432,13 @@ const [notifs] = await pool.query(
             console.log('Could not fetch children for prompt:', e.message);
         }
 
-        // Build prompt scoped to the 4 allowed domains
+        // Build prompt using selected content preferences (or all domains if none selected)
+        const domainDesc = contentPreferences.length
+            ? contentPreferences.join(' and ')
+            : 'language development, literacy, science exploration, and social-emotional learning';
         const prompt = childContext
-            ? `Language development, literacy, science exploration, and social-emotional learning activities at ${nearbyLocation.name} for children (${childContext})`
-            : `Language development, literacy, science exploration, and social-emotional learning activities at ${nearbyLocation.name}`;
+            ? `${domainDesc} activities at ${nearbyLocation.name} for children (${childContext})`
+            : `${domainDesc} activities at ${nearbyLocation.name}`;
 
         // Get personalized tips using the same service as the parenting assistant
         let tips = [];
@@ -471,12 +482,20 @@ const [notifs] = await pool.query(
         await sendNotification(
             deviceToken,
             `You have arrived at ${nearbyLocation.name}`,
-            `${nearbyLocation.type} Tips:\n\n${tipsText}`,
+            `Tips for ${nearbyLocation.name}:\n\n${tipsText}`,
             {
                 notificationId,
                 locationType: nearbyLocation.type,
                 locationId: nearbyLocation.id.toString(),
                 locationName: nearbyLocation.name,
+                tips: JSON.stringify(tips.map(t => ({
+                    id: t.id,
+                    title: t.title,
+                    body: t.body || t.description || '',
+                    details: t.details || '',
+                    categories: t.categories || [],
+                    isGenerated: t.isGenerated || false,
+                }))),
             },
             isIOS,
         );
