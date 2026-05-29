@@ -811,11 +811,18 @@ class PersonalizationService {
                     `🤖 AI generation attempt ${attempt}/${maxRetries} for query: "${query}"`,
                 );
 
-                let userMsg = `Generate ${count} practical parenting tips strictly about "${query}".${keywordPin}
+                const selectedDomains = normalizeContentDomains(contentPreferences);
+                const activeDomainLine = selectedDomains.length
+                    ? selectedDomains.join(', ')
+                    : domainLine;
+
+                let userMsg = `Generate ${count} practical parenting tips that apply ${selectedDomains.length ? selectedDomains.join(' and ') : 'the allowed domains'} to this scenario: "${query}".${keywordPin}
                                 RULES:
-                                - Domains allowed: ${domainLine}
+                                - Domains allowed: ${activeDomainLine}
+                                - Every tip MUST be in one of these domains: ${activeDomainLine}
+                                - Frame each tip as a ${selectedDomains.length ? selectedDomains.join(' / ') : 'developmental'} activity for the scenario above
                                 - DO NOT give advice on discipline, sleep, eating, potty training, screen time, medical, logistics, or legal topics
-                                - Be specific, actionable, age-appropriate
+                                - Be specific, actionable, age-appropriate (0–5 years)
                                 - Keep outputs concise
 
                                 Return ONLY a JSON array like:
@@ -823,9 +830,8 @@ class PersonalizationService {
                                     {"id":1,"title":"≤50 chars","body":"2 short sentences.","details":"1 short sentence.","categories":["one_of_the_4_domains"]}
                                 ]`;
 
-                const selectedDomains = normalizeContentDomains(contentPreferences);
                 if (selectedDomains.length) {
-                    userMsg += `\n\nUser-selected domains: ${selectedDomains.join(', ')}. Generate tips ONLY in these selected domains. Every tip category must be one of these selected domains.`;
+                    userMsg += `\n\nHARD CONSTRAINT: Generate tips ONLY in [${selectedDomains.join(', ')}]. Every tip's "categories" field MUST be one of these. Do NOT generate tips from other domains.`;
                 }
 
                 if (preferenceContext) {
@@ -1741,21 +1747,32 @@ ABSOLUTE RULES — NO EXCEPTIONS:
             ? `Prefer including: ${keywords.map(k => `"${k}"`).join(', ')}`
             : '';
 
-        let userMsg = `Output exactly 3 parenting tips about: "${query}" as NDJSON (one JSON object per line). Each line must be:
+        const domainContext = selectedDomains.length
+            ? `Apply ${selectedDomains.join(' and ')} to this scenario`
+            : 'Cover any of the 4 allowed domains';
+
+        let userMsg = `Generate exactly 3 parenting tips that apply the selected domain(s) to this specific scenario: "${query}".
+      ${domainContext}.
+      Output as NDJSON — one JSON object per line:
       {"title":"≤50 chars","body":"2 short sentences","details":"1 short sentence","categories":["one_of:${outputDomains.join('|')}"]}
-      
+
       Rules:
-      - STRICTLY within selected domains: ${outputDomains.join(', ')}.
+      - Every tip MUST be in one of these domains: ${outputDomains.join(', ')}.
+      - Frame each tip so it is clearly about ${selectedDomains.length ? selectedDomains.join(' or ') : 'the allowed domain'} applied to the scenario.
       - No medical, sleep, eating, potty, discipline, legal, logistics, or screen-time advice.
-      - Age-appropriate, specific, concise.
+      - Age-appropriate (0–5 years), specific, actionable.
       - No markdown, no arrays, no extra text — ONLY JSON objects, one per line.
       ${pinLine}`;
 
         if (selectedDomains.length) {
-            userMsg += `\nSelected domains are a HARD constraint: generate tips ONLY for ${selectedDomains.join(', ')}. Do not output any other category.`;
+            userMsg += `\nHARD CONSTRAINT: ALL 3 tips must have "categories" set to one of [${selectedDomains.map(d => `"${d}"`).join(', ')}]. Do NOT output any tip from a different domain.`;
         }
 
         onPhase?.('openai:starting');
+
+        const systemContent = selectedDomains.length
+            ? `You are ENACT, a children's early education assistant. You ONLY generate tips in these domain(s): ${selectedDomains.join(', ')}. Output STRICT NDJSON: one complete JSON object per line. No arrays, no prose, no other domains.`
+            : `You are ENACT, a children's early education assistant. You ONLY generate tips in these 4 domains: Language Development, Early Science Skills, Literacy Foundations, Social-Emotional Learning. Output STRICT NDJSON: one complete JSON object per line. No arrays or prose.`;
 
         const stream = await openai.chat.completions.create({
             model: process.env.OPENAI_TIPS_MODEL || 'gpt-4o-mini',
@@ -1766,8 +1783,7 @@ ABSOLUTE RULES — NO EXCEPTIONS:
             messages: [
                 {
                     role: 'system',
-                    content:
-                        'You output STRICT NDJSON: one complete JSON object per line. No arrays or prose.',
+                    content: systemContent,
                 },
                 { role: 'user', content: userMsg },
             ],
