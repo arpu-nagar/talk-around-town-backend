@@ -291,15 +291,7 @@ router.post('/', authenticateJWT, async (req, res) => {
 
     try {
         let user_id = req.user.id;
-        const { latitude, longitude, contentPreferences: clientPrefs, diagnosticBypassCooldown } = req.body;
-
-        // Admin-only diagnostic flag — bypasses both cooldown layers so the full
-        // notification pipeline can be tested without waiting 6 hours.
-        // Silently ignored for non-admin users even if the flag is present.
-        // MySQL TINYINT isAdmin comes out of jwt.verify() as 1 (not true), so use loose check.
-        const isAdmin = req.user.isAdmin === true || req.user.isAdmin === 1;
-        const bypassCooldown = diagnosticBypassCooldown === true && isAdmin;
-        console.log(`[LOCATION] bypass check: diagnosticBypassCooldown=${diagnosticBypassCooldown} req.user.isAdmin=${req.user.isAdmin} (type=${typeof req.user.isAdmin}) isAdmin=${isAdmin} bypassCooldown=${bypassCooldown}`);
+        const { latitude, longitude, contentPreferences: clientPrefs } = req.body;
 
         if (!latitude || !longitude) {
             return res
@@ -308,24 +300,16 @@ router.post('/', authenticateJWT, async (req, res) => {
         }
 
         // Check if there's a pending request for this user
-        if (!bypassCooldown) {
-            if (notificationCache.has(user_id)) {
-                const lastRequest = notificationCache.get(user_id);
-                if (Date.now() - lastRequest < 60000) {
-                    // 60 second cooldown — must be longer than AI+FCM processing time
-                    // to prevent BackgroundFetch firing while a foreground request is
-                    // still awaiting its DB insert
-                    console.log(`[LOCATION] Cooldown applied (in-memory throttle) user_id=${user_id}`);
-                    return res.status(200).json({
-                        message: 'Request throttled',
-                        status: 'throttled',
-                    });
-                }
+        if (notificationCache.has(user_id)) {
+            const lastRequest = notificationCache.get(user_id);
+            if (Date.now() - lastRequest < 60000) {
+                return res.status(200).json({
+                    message: 'Request throttled',
+                    status: 'throttled',
+                });
             }
-            notificationCache.set(user_id, Date.now());
-        } else {
-            console.log(`[DIAG] diagnosticBypassCooldown: skipping in-memory throttle for admin user_id=${user_id}`);
         }
+        notificationCache.set(user_id, Date.now());
 
         // Get user's locations
         const [rows] = await pool.query(
@@ -364,23 +348,18 @@ router.post('/', authenticateJWT, async (req, res) => {
         }
 
         // Check for recent notifications
-        if (!bypassCooldown) {
-            const [notifs] = await pool.query(
-                `SELECT COUNT(*) AS notification_count
-                 FROM notifications
-                 WHERE user_id = ? AND loc_id = ?
-                 AND timestamp >= CURRENT_TIMESTAMP - INTERVAL 6 HOUR;`,
-                [user_id, nearbyLocation.id],
-            );
-            if (notifs[0].notification_count > 0) {
-                console.log(`[LOCATION] Cooldown applied (6-hour DB cooldown) user_id=${user_id} loc_id=${nearbyLocation.id}`);
-                return res.status(200).json({
-                    message: 'Notification cooldown active',
-                    status: 'cooldown',
-                });
-            }
-        } else {
-            console.log(`[DIAG] diagnosticBypassCooldown: skipping 6-hour DB cooldown for admin user_id=${user_id} loc_id=${nearbyLocation.id}`);
+        const [notifs] = await pool.query(
+            `SELECT COUNT(*) AS notification_count
+             FROM notifications
+             WHERE user_id = ? AND loc_id = ?
+             AND timestamp >= CURRENT_TIMESTAMP - INTERVAL 6 HOUR;`,
+            [user_id, nearbyLocation.id],
+        );
+        if (notifs[0].notification_count > 0) {
+            return res.status(200).json({
+                message: 'Notification cooldown active',
+                status: 'cooldown',
+            });
         }
 
         // Get user's device token
@@ -527,17 +506,12 @@ router.post('/', authenticateJWT, async (req, res) => {
             [user_id, nearbyLocation.id, deviceToken],
         );
 
-        if (bypassCooldown) {
-            console.log(`[DIAG] diagnosticBypassCooldown: notification sent after bypass for admin user_id=${user_id} loc=${nearbyLocation.name}`);
-        }
-
         return res.status(200).json({
             message: 'Notification sent successfully',
             status: 'success',
             location: nearbyLocation.name,
             type: nearbyLocation.type,
             notificationId,
-            ...(bypassCooldown && {diagnosticBypassCooldown: true}),
         });
     } catch (error) {
         console.error('Error in location check:', error);
