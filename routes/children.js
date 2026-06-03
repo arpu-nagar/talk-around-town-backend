@@ -36,12 +36,12 @@ router.post('/children', authenticateJWT, async (req, res) => {
         const { nickname, age, date_of_birth } = req.body;
         const user_id = req.user.id;
 
-        // Validate age (must be integer 1-5)
-        if (!Number.isInteger(age) || age < 1 || age > 5) {
+        // Validate age (must be integer 0-5; 0 = under 1 year)
+        if (!Number.isInteger(age) || age < 0 || age > 5) {
             connection.release();
             return res.status(400).json({
                 success: false,
-                message: 'Child age must be an integer between 1 and 5',
+                message: 'Child age must be an integer between 0 and 5',
             });
         }
 
@@ -95,13 +95,13 @@ router.post('/updateChildren', authenticateJWT, async (req, res) => {
         const { children } = req.body;
         const user_id = req.user.id;
 
-        // Validate all age values first (must be integer 1-5)
+        // Validate all age values first (must be integer 0-5; 0 = under 1 year)
         for (const child of children) {
-            if (!Number.isInteger(child.age) || child.age < 1 || child.age > 5) {
+            if (!Number.isInteger(child.age) || child.age < 0 || child.age > 5) {
                 connection.release();
                 return res.status(400).json({
                     success: false,
-                    message: 'Child age must be an integer between 1 and 5',
+                    message: 'Child age must be an integer between 0 and 5',
                 });
             }
         }

@@ -423,9 +423,12 @@ const [notifs] = await pool.query(
             );
             if (childRows.length > 0) {
                 childContext = childRows
-                    .map(c => c.nickname
-                        ? `${c.nickname}: ${c.age} year${c.age === 1 ? '' : 's'} old`
-                        : `${c.age} year${c.age === 1 ? '' : 's'} old`)
+                    .map(c => {
+                        const ageStr = c.age === 0
+                            ? 'under 1 year'
+                            : `${c.age} year${c.age === 1 ? '' : 's'}`;
+                        return c.nickname ? `${c.nickname}: ${ageStr} old` : `${ageStr} old`;
+                    })
                     .join(', ');
             }
         } catch (e) {
