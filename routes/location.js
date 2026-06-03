@@ -296,7 +296,10 @@ router.post('/', authenticateJWT, async (req, res) => {
         // Admin-only diagnostic flag — bypasses both cooldown layers so the full
         // notification pipeline can be tested without waiting 6 hours.
         // Silently ignored for non-admin users even if the flag is present.
-        const bypassCooldown = diagnosticBypassCooldown === true && req.user.isAdmin === true;
+        // MySQL TINYINT isAdmin comes out of jwt.verify() as 1 (not true), so use loose check.
+        const isAdmin = req.user.isAdmin === true || req.user.isAdmin === 1;
+        const bypassCooldown = diagnosticBypassCooldown === true && isAdmin;
+        console.log(`[LOCATION] bypass check: diagnosticBypassCooldown=${diagnosticBypassCooldown} req.user.isAdmin=${req.user.isAdmin} (type=${typeof req.user.isAdmin}) isAdmin=${isAdmin} bypassCooldown=${bypassCooldown}`);
 
         if (!latitude || !longitude) {
             return res
