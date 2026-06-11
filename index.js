@@ -9,6 +9,7 @@ import jwt from 'jsonwebtoken';
 import url from 'url';
 import http from 'http';
 import location from './routes/location.js';
+import geofenceRouter from './routes/geofence.js';
 import 'dotenv/config';
 import morgan from 'morgan';
 import user from './routes/user.js';
@@ -244,6 +245,7 @@ app.get('/', async (req, res) => {
     return res.send('Active');
 });
 app.use('/endpoint', location);
+app.use('/endpoint', geofenceRouter);
 const port = process.env.PORT || 1337;
 server.listen(port, err => {
     if (err) console.log(err);
