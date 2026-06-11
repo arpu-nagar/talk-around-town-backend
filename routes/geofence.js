@@ -115,8 +115,10 @@ router.post('/geofence-enter', authenticateJWT, async (req, res) => {
         }
 
         const title = `You've arrived at ${location.name}`;
-        const bodyText = tips.slice(0, 2).map(t => t.title).filter(Boolean).join(' • ')
-            || `Tips for ${location.type}`;
+        const tipLines = tips.slice(0, 2).map(t => t.title).filter(Boolean);
+        const bodyText = tipLines.length
+            ? tipLines.map(t => `• ${t}`).join('\n')
+            : `Tips for ${location.type}`;
 
         // Record so the 6-hour cooldown applies to subsequent triggers
         await pool.query(
