@@ -2,6 +2,7 @@ import express from 'express';
 import pool from '../config/db.js';
 import { authenticateJWT } from './middleware.js';
 import personalizationService from '../services/personalizationService.js';
+import { buildLocationNotificationPayload } from '../utils/locationNotificationPayload.js';
 
 const router = express.Router();
 
@@ -35,14 +36,18 @@ router.post('/geofence-enter', authenticateJWT, async (req, res) => {
         return res.status(400).json({ error: 'locationId is required' });
     }
 
-    // Idempotency: same OS transition delivered twice within 30 minutes → skip silently
+    // Idempotency: same OS transition delivered twice after successful processing
+    // within 30 minutes → skip silently. Mark only after a cooldown/success outcome
+    // so transient backend failures do not poison retries that reuse the same key.
     if (idempotencyKey) {
         if (processedKeys.has(idempotencyKey)) {
             console.log(`[geofence-enter] Duplicate idempotency key: ${idempotencyKey}`);
             return res.status(200).json({ status: 'duplicate' });
         }
-        processedKeys.set(idempotencyKey, Date.now());
     }
+
+    let lockName = null;
+    let lockAcquired = false;
 
     try {
         // Verify the location belongs to this user
@@ -54,6 +59,13 @@ router.post('/geofence-enter', authenticateJWT, async (req, res) => {
             return res.status(404).json({ error: 'Location not found or does not belong to user' });
         }
 
+        lockName = `location-notification:${userId}:${location.id}`;
+        const [[lockRow]] = await pool.query('SELECT GET_LOCK(?, 5) AS acquired', [lockName]);
+        lockAcquired = lockRow?.acquired === 1;
+        if (!lockAcquired) {
+            return res.status(200).json({ status: 'duplicate', message: 'Notification processing already in progress' });
+        }
+
         // 6-hour per-(user, location) cooldown — same window as the existing /endpoint route
         const [[{ cnt }]] = await pool.query(
             `SELECT COUNT(*) AS cnt FROM notifications
@@ -62,6 +74,7 @@ router.post('/geofence-enter', authenticateJWT, async (req, res) => {
         );
         if (cnt > 0) {
             console.log(`[geofence-enter] Cooldown active for user=${userId} loc=${location.id}`);
+            if (idempotencyKey) processedKeys.set(idempotencyKey, Date.now());
             return res.status(200).json({ status: 'cooldown', message: 'Cooldown active' });
         }
 
@@ -114,39 +127,36 @@ router.post('/geofence-enter', authenticateJWT, async (req, res) => {
             ))[0];
         }
 
-        const title = `You've arrived at ${location.name}`;
-        const tipLines = tips.slice(0, 2).map(t => t.title).filter(Boolean);
-        const bodyText = tipLines.length
-            ? tipLines.map(t => `• ${t}`).join('\n')
-            : `Tips for ${location.type}`;
+        const notificationId = `${userId}-${location.id}-${Date.now()}`;
+        const payload = buildLocationNotificationPayload({
+            location,
+            tips,
+            notificationId,
+        });
 
         // Record so the 6-hour cooldown applies to subsequent triggers
         await pool.query(
             'INSERT INTO notifications (user_id, loc_id, device_id) VALUES (?, ?, ?)',
             [userId, location.id, `geofence-${platform}`]
         );
+        if (idempotencyKey) processedKeys.set(idempotencyKey, Date.now());
 
-        const tipsPayload = tips.map(t => ({
-            id: t.id,
-            title: t.title,
-            body: t.body || t.description || '',
-            details: t.details || '',
-            categories: t.categories || [],
-            isGenerated: t.isGenerated || false,
-        }));
-
-        console.log(`[geofence-enter] Success: user=${userId} loc=${location.id} tips=${tipsPayload.length}`);
+        console.log(`[geofence-enter] Success: user=${userId} loc=${location.id} tips=${payload.tips.length}`);
         return res.status(200).json({
             status: 'success',
-            title,
-            body: bodyText,
-            locationName: location.name,
-            locationType: location.type,
-            tips: tipsPayload,
+            ...payload,
         });
     } catch (err) {
         console.error('[geofence-enter] Error:', err);
         return res.status(500).json({ error: 'Internal server error' });
+    } finally {
+        if (lockAcquired && lockName) {
+            try {
+                await pool.query('DO RELEASE_LOCK(?)', [lockName]);
+            } catch (releaseErr) {
+                console.error('[geofence-enter] Failed to release lock:', releaseErr.message);
+            }
+        }
     }
 });
 

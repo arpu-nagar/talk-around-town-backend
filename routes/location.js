@@ -6,6 +6,10 @@ import { authenticateJWT } from './middleware.js';
 import { createRequire } from 'module';
 import { GoogleAuth } from 'google-auth-library';
 import personalizationService from '../services/personalizationService.js';
+import {
+    buildLocationNotificationPayload,
+    notificationDataForPush,
+} from '../utils/locationNotificationPayload.js';
 
 const require = createRequire(import.meta.url);
 const serviceAccount = require('../key.json');
@@ -347,6 +351,18 @@ router.post('/', authenticateJWT, async (req, res) => {
             });
         }
 
+        const lockName = `location-notification:${user_id}:${nearbyLocation.id}`;
+        let lockAcquired = false;
+        try {
+            const [[lockRow]] = await pool.query('SELECT GET_LOCK(?, 5) AS acquired', [lockName]);
+            lockAcquired = lockRow?.acquired === 1;
+            if (!lockAcquired) {
+                return res.status(200).json({
+                    message: 'Notification processing already in progress',
+                    status: 'duplicate',
+                });
+            }
+
         // Check for recent notifications
         const [notifs] = await pool.query(
             `SELECT COUNT(*) AS notification_count
@@ -478,24 +494,16 @@ router.post('/', authenticateJWT, async (req, res) => {
 
         // Send notification with unique identifier
         const notificationId = `${user_id}-${nearbyLocation.id}-${Date.now()}`;
+        const payload = buildLocationNotificationPayload({
+            location: nearbyLocation,
+            tips,
+            notificationId,
+        });
         await sendNotification(
             deviceToken,
-            `You have arrived at ${nearbyLocation.name}`,
-            `Tips for ${nearbyLocation.name}:\n\n${tipsText}`,
-            {
-                notificationId,
-                locationType: nearbyLocation.type,
-                locationId: nearbyLocation.id.toString(),
-                locationName: nearbyLocation.name,
-                tips: JSON.stringify(tips.map(t => ({
-                    id: t.id,
-                    title: t.title,
-                    body: t.body || t.description || '',
-                    details: t.details || '',
-                    categories: t.categories || [],
-                    isGenerated: t.isGenerated || false,
-                }))),
-            },
+            payload.title,
+            payload.body,
+            notificationDataForPush(payload),
             isIOS,
         );
 
@@ -512,7 +520,17 @@ router.post('/', authenticateJWT, async (req, res) => {
             location: nearbyLocation.name,
             type: nearbyLocation.type,
             notificationId,
+            notification: payload,
         });
+        } finally {
+            if (lockAcquired) {
+                try {
+                    await pool.query('DO RELEASE_LOCK(?)', [lockName]);
+                } catch (releaseErr) {
+                    console.error('Failed to release notification lock:', releaseErr.message);
+                }
+            }
+        }
     } catch (error) {
         console.error('Error in location check:', error);
         return res.status(500).json({

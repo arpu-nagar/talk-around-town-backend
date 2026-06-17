@@ -12,13 +12,13 @@ const authenticateJWT = (req, res, next) => {
   if (bearer !== 'Bearer' || !token) {
     return res.status(401).json({ message: 'Invalid authorization format' });
   }
-console.log('AuthHeader:', authHeader);
+  console.log('AuthHeader:', { hasBearerToken: true, tokenPrefix: token.slice(0, 12) });
   
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret');
     req.user = decoded;
     next();
-console.log('Decoded User:', decoded);
+    console.log('Decoded User:', { id: decoded.id, isAdmin: Boolean(decoded.isAdmin) });
   } catch (error) {
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({ 
